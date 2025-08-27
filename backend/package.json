@@ -1,0 +1,18 @@
+{
+  "name": "wealth-wise-server",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node index.js",
+    "migrate": "node db/migrate.pg.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "pg": "^8.12.0"
+  },
+  "engines": { "node": ">=18.18" }
+}
