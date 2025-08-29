@@ -37,9 +37,9 @@ export const AuthForm = ({ onLogin }: AuthFormProps) => {
       const body = {
         nome: name || "Usuário",
         email,
-        cpf: (Math.random().toString().slice(2,13)).padEnd(11,'0'),
         renda_fixa: Number(monthlyIncome || 0),
         gastos_fixos: Number(fixedExpenses || 0),
+        meta_economia: Number(String(savingsGoal || 0).replace(',','.')),
         senha: password || ""
       };
       const res = await postUsuario(body as any);
