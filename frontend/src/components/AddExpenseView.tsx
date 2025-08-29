@@ -29,10 +29,8 @@ export function AddExpenseView() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    getCategorias(idUsuario)
-      .then((cats) => setCategorias(cats.filter((c) => c.tipo === "despesa")))
-      .catch((e) => setError(e?.message || String(e)));
-  }, [idUsuario]);
+    getCategorias('despesa').then(setCategorias);
+  });
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -48,7 +46,6 @@ export function AddExpenseView() {
       await postTransacao({
         id_usuario: idUsuario,
         id_categoria: idCategoria,
-        tipo: "despesa",
         valor: v,
         data_transacao: data, // "YYYY-MM-DD"
         descricao: descricao || null,

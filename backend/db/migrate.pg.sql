@@ -7,3 +7,32 @@ create table if not exists usuario (
   gastos_fixos   numeric(12,2) not null default 0 check (gastos_fixos >= 0),
   meta_economia  numeric(12,2) not null default 0 check (meta_economia >= 0)
 );
+
+create table if not exists categoria (
+  id_categoria   bigserial primary key,
+  nome_categoria varchar(100) not null,
+  tipo           varchar(20)  not null check (tipo in ('receita','despesa')),
+  unique (nome_categoria, tipo)
+);
+
+create table if not exists transacao (
+  id_transacao    bigserial primary key,
+  id_usuario      bigint not null references usuario(id_usuario) on delete cascade,
+  id_categoria    bigint not null references categoria(id_categoria),
+  descricao       varchar(255),
+  valor           numeric(12,2) not null check (valor>= 0),
+  tipo            varchar(20)   not null check (tipo in ('receita','despesa')),
+  data_transacao  date          not null default current_date
+);
+
+insert into categoria (nome_categoria, tipo) values
+('Alimentação','despesa'),
+('Educação','despesa'),
+('Lazer','despesa'),
+('Moradia','despesa'),
+('Roupas e Acessórios','despesa'),
+('Saúde','despesa'),
+('Serviços','despesa'),
+('Transporte','despesa'),
+('Outros','despesa')
+on conflict do nothing;
