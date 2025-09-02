@@ -45,6 +45,43 @@ app.post('/api/usuarios', async (req, res) => {
   }
 });
 
+app.post('/api/login', async (req, res) => {
+  try {
+    const emailRaw = req.body?.email ?? '';
+    const senhaRaw = req.body?.senha ?? '';
+    const email = String(emailRaw).trim();
+    const senha = String(senhaRaw);
+
+    if (!email || !senha) {
+      return res.status(400).json({ error: 'email e senha são obrigatórios' });
+    }
+
+    const { rows } = await pool.query(
+      'select id_usuario, nome, email, senha from usuario where lower(email) = lower($1)',
+      [email]
+    );
+
+    if (!rows.length) {
+      return res.status(401).json({ error: 'E-mail ou senha incorretos' });
+    }
+
+    const user = rows[0];
+
+    if (String(user.senha) !== senha) {
+      return res.status(401).json({ error: 'E-mail ou senha incorretos' });
+    }
+
+    return res.json({
+      id_usuario: user.id_usuario,
+      nome: user.nome,
+      email: user.email,
+    });
+  } catch (e) {
+    console.error('POST /api/login erro:', e);
+    return res.status(500).json({ error: 'Erro ao fazer login' });
+  }
+});
+
 app.get('/api/usuarios/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -64,7 +101,7 @@ async function handleListCategorias(req, res) {
 
     const sql = tipo
     ? 'select id_categoria, nome_categoria, tipo from categoria where tipo = $1 order by nome_categoria'
-    : 'select id_categoria, nome_categoria, tipo from categoria order by tipo, nome_categoria';
+    : 'select id_categoria, nome_categoria, tipo from categoria order by id_categoria, tipo, nome_categoria';
 
     const { rows } = await pool.query(sql, tipo? [tipo] : []);
     res.json(rows);

@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { postUsuario } from "@/lib/api";
+import { postUsuario, postLogin } from "@/lib/api";
 
 interface AuthFormProps {
   onLogin: () => void;
@@ -20,10 +20,16 @@ export const AuthForm = ({ onLogin }: AuthFormProps) => {
   const [fixedExpenses, setFixedExpenses] = useState("");
   const [savingsGoal, setSavingsGoal] = useState(""); // Meta de economia mensal
 
-  const handleLogin = (e: React.FormEvent) => {
-    try { if(!localStorage.getItem('id_usuario')) localStorage.setItem('id_usuario','1'); } catch {}
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    onLogin();
+    try {
+      const res = await postLogin(email.trim(), password);
+      localStorage.setItem("id_usuario", String(res.id_usuario));
+      onLogin();
+    } catch (err: any) {
+      console.error(err);
+      alert("Falha ao entrar: " + (err?.message || "E-mail ou senha incorretos"));
+    }
   };
 
   const handleRegisterStep1 = (e: React.FormEvent) => {

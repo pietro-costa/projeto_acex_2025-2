@@ -12,7 +12,6 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-
 export type Categoria = {
   id_categoria: number;
   nome_categoria: string;
@@ -99,6 +98,12 @@ export const postUsuario = (u: NewUsuario) =>
   });
 
 export const getUsuario = (id: number) => api<Usuario>(`/api/usuarios/${id}`);
+
+export const postLogin = (email: string, senha: string) =>
+  api<{ id_usuario: number; nome: string; email: string }>(`/api/login`, {
+    method: "POST",
+    body: JSON.stringify({ email, senha }),
+  });
 
 export const patchUsuario = (
   id: number,
