@@ -6,8 +6,8 @@
    - Trocar o tema (claro/escuro)
 */
 
-import { useState } from "react";
-import { getUsuario, patchUsuario, type Usuario } from "@/lib/api";
+import { useState, useEffect } from "react";
+import { getUsuario, patchUsuario, getAccountStats, type Usuario } from "@/lib/api";
 import { getUserId } from "@/lib/user";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -16,53 +16,87 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 
 export const SettingsView = () => {
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string|null>(null);
-  const [usuario, setUsuario] = useState<Usuario | null>(null);
-  const [monthlyIncome, setMonthlyIncome] = useState<number>(0);
-  const [fixedExpenses, setFixedExpenses] = useState<number>(0);
   const id = getUserId();
 
+  // estado de tela
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  // dados do usuário
+  const [usuario, setUsuario] = useState<Usuario | null>(null);
+  const [userName, setUserName] = useState<string>("");
+  const [monthlyIncome, setMonthlyIncome] = useState<number>(0);
+  const [fixedExpenses, setFixedExpenses] = useState<number>(0);
+
+  // estatísticas
+  const [diasConta, setDiasConta] = useState(0);
+  const [totalGastos, setTotalGastos] = useState(0);
+  const [economiaMes, setEconomiaMes] = useState<number>(0);
+
+  // preferências locais (ainda não persistidas)
+  const [isDarkTheme, setIsDarkTheme] = useState(true);
+
+  function formatBRL(v: number | string) {
+    const n = Number(v ?? 0);
+    return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(n);
+  }
+
+  // carrega usuário + estatísticas
   useEffect(() => {
     let active = true;
     setLoading(true);
-    getUsuario(id).then(u => {
-      if(!active) return;
-      setUsuario(u);
-      setMonthlyIncome(Number(u.renda_fixa || 0));
-      setFixedExpenses(Number(u.gastos_fixos || 0));
-    }).catch(e => setError(e.message || String(e)))
-      .finally(()=>active && setLoading(false));
-    return ()=>{ active=false };
+
+    Promise.all([getUsuario(id), getAccountStats(id)])
+      .then(([u, stats]) => {
+        if (!active) return;
+        setUsuario(u);
+        setUserName(u.nome ?? "");
+        setMonthlyIncome(Number(u.renda_fixa || 0));
+        setFixedExpenses(Number(u.gastos_fixos || 0));
+
+        setDiasConta(stats?.dias_conta ?? 0);
+        setTotalGastos(stats?.total_gastos ?? 0);
+        setEconomiaMes(Number(stats?.economia_mes ?? 0));
+      })
+      .catch((e) => active && setError(e?.message || String(e)))
+      .finally(() => active && setLoading(false));
+
+    return () => {
+      active = false;
+    };
   }, [id]);
 
-  async function salvar() {
+  // salva alterações no banco e atualiza a tela
+  async function salvar(e?: React.FormEvent) {
+    e?.preventDefault();
     try {
-      await patchUsuario(id, { renda_fixa: monthlyIncome, gastos_fixos: fixedExpenses });
-      const updated = await getUsuario(id);
+      setSaving(true);
+
+      await patchUsuario(id, {
+        nome: userName.trim(),
+        renda_fixa: Number(monthlyIncome) || 0,
+        gastos_fixos: Number(fixedExpenses) || 0,
+      });
+
+      const [updated, stats] = await Promise.all([getUsuario(id), getAccountStats(id)]);
+
       setUsuario(updated);
-      alert('Configurações salvas!');
-    } catch (e:any) {
-      alert('Erro ao salvar: ' + (e?.message || 'erro desconhecido'));
+      setUserName(updated.nome ?? "");
+      setMonthlyIncome(Number(updated.renda_fixa || 0));
+      setFixedExpenses(Number(updated.gastos_fixos || 0));
+
+      setDiasConta(stats?.dias_conta ?? 0);
+      setTotalGastos(stats?.total_gastos ?? 0);
+      setEconomiaMes(Number(stats?.economia_mes ?? 0));
+
+      alert("Configurações salvas!");
+    } catch (e: any) {
+      alert("Erro ao salvar: " + (e?.message || "erro desconhecido"));
+    } finally {
+      setSaving(false);
     }
   }
-
-  // Estados para guardar as informações do usuário
-  const [userName, setUserName] = useState("João Silva"); // Nome atual
-  const [userSalary, setUserSalary] = useState("3000"); // Salário atual
-  const [isDarkTheme, setIsDarkTheme] = useState(true); // Tema escuro ou claro
-
-  // Função que executa quando o usuário clica em "Salvar Alterações"
-  const handleSaveChanges = () => {
-    // Aqui você salvaria os dados no banco de dados
-    // Por enquanto só mostra um alerta
-    alert("Configurações salvas com sucesso!");
-    console.log("Dados salvos:", {
-      nome: userName,
-      salario: userSalary,
-      temaEscuro: isDarkTheme
-    });
-  };
 
   return (
     <div className="space-y-6">
@@ -99,12 +133,24 @@ export const SettingsView = () => {
               <Input
                 id="salary"
                 type="number"
-                value={userSalary}
-                onChange={(e) => setUserSalary(e.target.value)} // Atualiza o salário quando digita
+                value={monthlyIncome}
+                onChange={(e) => setMonthlyIncome(Number(e.target.value) || 0)} // Atualiza o salário quando digita
                 placeholder="3000"
                 className="bg-slate-700 border-slate-600 text-white"
               />
             </div>
+
+            <div className="space-y-2">
+            <Label htmlFor="fixed" className="text-white">Gastos Fixos (R$)</Label>
+            <Input
+              id="fixed"
+              type="number"
+              value={fixedExpenses}
+              onChange={(e) => setFixedExpenses(Number(e.target.value) || 0)}
+              placeholder="0"
+              className="bg-slate-700 border-slate-600 text-white"
+            />
+          </div>
 
           </CardContent>
         </Card>
@@ -160,17 +206,17 @@ export const SettingsView = () => {
             
             <div className="text-center p-4 bg-slate-700 rounded-lg">
               <p className="text-sm text-slate-400">Conta criada há</p>
-              <p className="text-2xl font-bold text-yellow-500">30 dias</p>
+              <p className="text-2xl font-bold text-yellow-500">{diasConta} dias</p>
             </div>
 
             <div className="text-center p-4 bg-slate-700 rounded-lg">
               <p className="text-sm text-slate-400">Total de gastos registrados</p>
-              <p className="text-2xl font-bold text-yellow-500">47</p>
+              <p className="text-2xl font-bold text-yellow-500">{totalGastos}</p>
             </div>
 
             <div className="text-center p-4 bg-slate-700 rounded-lg">
               <p className="text-sm text-slate-400">Economias este mês</p>
-              <p className="text-2xl font-bold text-green-500">R$ 450</p>
+              <p className="text-2xl font-bold text-green-500">{formatBRL(economiaMes)}</p>
             </div>
 
           </div>
@@ -180,7 +226,7 @@ export const SettingsView = () => {
       {/* BOTÃO PARA SALVAR TODAS AS ALTERAÇÕES */}
       <div className="flex justify-end">
         <Button 
-          onClick={handleSaveChanges}
+          onClick={salvar}
           className="bg-yellow-500 hover:bg-yellow-600 text-slate-900 font-bold px-6 py-2"
         >
           💾 Salvar Alterações

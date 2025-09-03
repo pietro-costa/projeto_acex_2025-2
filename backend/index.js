@@ -94,6 +94,34 @@ app.get('/api/usuarios/:id', async (req, res) => {
   }
 });
 
+app.patch('/api/usuarios/:id', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) return res.status(400).json({ error: 'id inválido' });
+
+    const { nome, renda_fixa, gastos_fixos, meta_economia, senha } = req.body ?? {};
+
+    const sets = [];
+    const vals = [id];
+    let i = 2;
+
+    if (nome !== undefined) { sets.push(`nome = $${i++}`); vals.push(String(nome).trim()); }
+    if (renda_fixa !== undefined) { sets.push(`renda_fixa = $${i++}`); vals.push(toNum(renda_fixa)); }
+    if (gastos_fixos !== undefined) { sets.push(`gastos_fixos = $${i++}`); vals.push(toNum(gastos_fixos)); }
+    if (meta_economia !== undefined) { sets.push(`meta_economia = $${i++}`); vals.push(toNum(meta_economia)); }
+    if (senha !== undefined) { sets.push(`senha = $${i++}`); vals.push(String(senha)); }
+
+    if (sets.length === 0) return res.status(400).json({ error: 'Nada para atualizar' });
+
+    const sql = `update usuario set ${sets.join(', ')} where id_usuario = $1`;
+    await pool.query(sql, vals);
+    return res.json({ ok: true });
+  } catch (e) {
+    console.error('PATCH /api/usuarios/:id erro:', e);
+    return res.status(500).json({ error: 'Falha ao atualizar usuário' });
+  }
+});
+
 async function handleListCategorias(req, res) {
   try {
     const { tipo } = req.query;
@@ -200,6 +228,171 @@ app.get('/api/analytics/sum-by-category/:id_usuario', async (req, res) => {
   } catch (e) {
     console.error('GET /api/analytics/sum-by-category/:id_usuario erro:', e);
     res.status(500).json({ error: 'Erro ao calcular analytics' });
+  }
+});
+
+app.get('/api/analytics/sum-by-day/:id_usuario', async (req, res) => {
+  try {
+    const id_usuario = Number(req.params.id_usuario);
+    if (!Number.isFinite(id_usuario)) {
+      return res.status(400).json({ error: 'id_usuario inválido' });
+    }
+
+    const daysParam = Number(req.query.days ?? 7);
+    const days = Number.isFinite(daysParam) ? Math.min(Math.max(daysParam, 1), 31) : 7;
+
+    const { rows } = await pool.query(
+      `
+      with dias as (
+        select generate_series(
+          (current_date - ($2::int - 1) * interval '1 day')::date,
+          current_date,
+          interval '1 day'
+        )::date as dia
+      )
+      select
+        to_char(d.dia, 'DD/MM') as label,
+        coalesce(sum(t.valor), 0)::numeric(12,2) as total
+      from dias d
+      left join transacao t
+        on t.id_usuario = $1
+       and t.data_transacao = d.dia
+       and t.tipo = 'despesa'          -- fixo: só despesas
+      group by d.dia
+      order by d.dia;
+      `,
+      [id_usuario, days]
+    );
+
+    return res.json(rows);
+  } catch (e) {
+    console.error('GET /api/analytics/sum-by-day/:id_usuario erro:', e);
+    return res.status(500).json({ error: 'Erro ao calcular analytics' });
+  }
+});
+
+app.get('/api/analytics/sum-by-month/:id_usuario', async (req, res) => {
+  try {
+    const id_usuario = Number(req.params.id_usuario);
+    if (!Number.isFinite(id_usuario)) {
+      return res.status(400).json({ error: 'id_usuario inválido' });
+    }
+
+    const monthsParam = Number(req.query.months ?? 6);
+    const months = Number.isFinite(monthsParam) ? Math.min(Math.max(monthsParam, 1), 24) : 6;
+
+    const { rows } = await pool.query(
+      `
+      with meses as (
+        select generate_series(
+          date_trunc('month', current_date) - (($2::int - 1) * interval '1 month'),
+          date_trunc('month', current_date),
+          interval '1 month'
+        )::date as mes
+      )
+      select
+        to_char(m.mes, 'MM/YYYY') as label,
+        coalesce(sum(t.valor), 0)::numeric(12,2) as total
+      from meses m
+      left join transacao t
+        on t.id_usuario = $1
+       and t.data_transacao >= m.mes
+       and t.data_transacao <  (m.mes + interval '1 month')
+      group by m.mes
+      order by m.mes;
+      `,
+      [id_usuario, months]
+    );
+
+    return res.json(rows);
+  } catch (e) {
+    console.error('GET /api/analytics/sum-by-month erro:', e);
+    return res.status(500).json({ error: 'Erro ao calcular analytics mensal' });
+  }
+});
+
+app.get('/api/analytics/sum-by-year/:id_usuario', async (req, res) => {
+  try {
+    const id_usuario = Number(req.params.id_usuario);
+    if (!Number.isFinite(id_usuario)) {
+      return res.status(400).json({ error: 'id_usuario inválido' });
+    }
+
+    const yearsParam = Number(req.query.years ?? 3);
+    const years = Number.isFinite(yearsParam) ? Math.min(Math.max(yearsParam, 1), 10) : 3;
+
+    const { rows } = await pool.query(
+      `
+      with anos as (
+        select generate_series(
+          date_trunc('year', current_date) - (($2::int - 1) * interval '1 year'),
+          date_trunc('year', current_date),
+          interval '1 year'
+        )::date as ano
+      )
+      select
+        to_char(a.ano, 'YYYY') as label,
+        coalesce(sum(t.valor), 0)::numeric(12,2) as total
+      from anos a
+      left join transacao t
+        on t.id_usuario = $1
+       and t.data_transacao >= a.ano
+       and t.data_transacao <  (a.ano + interval '1 year')
+      group by a.ano
+      order by a.ano;
+      `,
+      [id_usuario, years]
+    );
+
+    return res.json(rows);
+  } catch (e) {
+    console.error('GET /api/analytics/sum-by-year erro:', e);
+    return res.status(500).json({ error: 'Erro ao calcular analytics anual' });
+  }
+});
+
+app.get('/api/analytics/account-stats/:id_usuario', async (req, res) => {
+  try {
+    const id = Number(req.params.id_usuario);
+    if (!Number.isFinite(id)) return res.status(400).json({ error: 'id_usuario inválido' });
+
+    const { rows } = await pool.query(
+      `
+      WITH base AS (
+        SELECT 
+          COALESCE(u.renda_fixa, 0)::numeric(12,2)   AS renda_fixa,
+          COALESCE(u.gastos_fixos, 0)::numeric(12,2) AS gastos_fixos
+        FROM usuario u
+        WHERE u.id_usuario = $1
+      ),
+      desp_mes AS (
+        SELECT COALESCE(SUM(valor),0)::numeric(12,2) AS total
+        FROM transacao
+        WHERE id_usuario = $1
+          AND date_trunc('month', data_transacao) = date_trunc('month', CURRENT_DATE)
+      ),
+      primeiro_reg AS (
+        SELECT MIN(data_transacao)::date AS dt
+        FROM transacao
+        WHERE id_usuario = $1
+      )
+      SELECT
+        COALESCE((SELECT (CURRENT_DATE - dt)::int FROM primeiro_reg WHERE dt IS NOT NULL), 0) AS dias_conta,
+        (SELECT COUNT(*) FROM transacao t WHERE t.id_usuario = $1)::int AS total_gastos,
+        GREATEST(
+          0,
+          (SELECT renda_fixa  FROM base)
+          - (SELECT gastos_fixos FROM base)
+          - (SELECT total       FROM desp_mes)
+        )::numeric(12,2) AS economia_mes
+      `
+      , [id]
+    );
+
+    res.json(rows[0]);
+  } catch (e) {
+    console.error('GET /api/analytics/account-stats/:id_usuario erro:', e);
+    res.status(500).json({ error: 'Falha ao calcular estatísticas' });
   }
 });
 

@@ -7,11 +7,12 @@
    O usuário pode escolher qual período quer ver
 */
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, LineChart, Line } from "recharts";
 import { Button } from "@/components/ui/button";
+import { getSumByDay, getSumByMonth, getSumByYear } from "@/lib/api";
 
 export const AdvancedAnalyticsView = () => {
   // Estado para controlar qual período está selecionado
@@ -20,32 +21,48 @@ export const AdvancedAnalyticsView = () => {
   // DADOS SIMULADOS PARA DIFERENTES PERÍODOS
 
   // Dados por dia (últimos 7 dias)
-  const dailyData = [
-    { period: "Seg", expenses: 45, label: "Segunda-feira" },
-    { period: "Ter", expenses: 78, label: "Terça-feira" },
-    { period: "Qua", expenses: 32, label: "Quarta-feira" },
-    { period: "Qui", expenses: 95, label: "Quinta-feira" },
-    { period: "Sex", expenses: 120, label: "Sexta-feira" },
-    { period: "Sáb", expenses: 89, label: "Sábado" },
-    { period: "Dom", expenses: 67, label: "Domingo" },
-  ];
+const [dailyData, setDailyData] = useState<{ period: string; expenses: number }[]>([]);
+const [loadingDaily, setLoadingDaily] = useState(false);
 
-  // Dados por mês (últimos 6 meses)
-  const monthlyData = [
-    { period: "Jul", expenses: 1250, label: "Julho" },
-    { period: "Ago", expenses: 1100, label: "Agosto" },
-    { period: "Set", expenses: 1350, label: "Setembro" },
-    { period: "Out", expenses: 1200, label: "Outubro" },
-    { period: "Nov", expenses: 1400, label: "Novembro" },
-    { period: "Dez", expenses: 1300, label: "Dezembro" },
-  ];
+useEffect(() => {
+  const id = Number(localStorage.getItem("id_usuario") || "1");
+  setLoadingDaily(true);
+  getSumByDay(id, 7)
+    .then(rows => {
+      setDailyData(rows.map(r => ({ period: r.label, expenses: Number(r.total) })));
+    })
+    .catch(err => console.error(err))
+    .finally(() => setLoadingDaily(false));
+}, []);
 
-  // Dados por ano (últimos 3 anos)
-  const yearlyData = [
-    { period: "2022", expenses: 14500, label: "2022" },
-    { period: "2023", expenses: 15800, label: "2023" },
-    { period: "2024", expenses: 16200, label: "2024" },
-  ];
+const [monthlyData, setMonthlyData] = useState<{ period: string; expenses: number }[]>([]);
+const [yearlyData, setYearlyData]   = useState<{ period: string; expenses: number }[]>([]);
+
+const [loadingMonthly, setLoadingMonthly] = useState(false);
+const [loadingYearly,  setLoadingYearly]  = useState(false);
+
+  // Dados por mês e por ano
+useEffect(() => {
+  const id = Number(localStorage.getItem("id_usuario") || "1");
+
+  setLoadingMonthly(true);
+  getSumByMonth(id, 6)
+    .then(rows => setMonthlyData(rows.map(r => ({
+      period: String(r.label),        // "MM/YYYY"
+      expenses: Number(r.total)
+    }))))
+    .catch(console.error)
+    .finally(() => setLoadingMonthly(false));
+
+  setLoadingYearly(true);
+  getSumByYear(id, 3)
+    .then(rows => setYearlyData(rows.map(r => ({
+      period: String(r.label),        // "YYYY"
+      expenses: Number(r.total)
+    }))))
+    .catch(console.error)
+    .finally(() => setLoadingYearly(false));
+}, []);
 
   // Função para decidir quais dados mostrar baseado no período selecionado
   const getCurrentData = () => {

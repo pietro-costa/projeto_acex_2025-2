@@ -36,6 +36,27 @@ export type SumByCategory = {
   total: number | string;
 };
 
+export type SumByDay = { 
+  label: string; 
+  total: number | string 
+};
+
+export type SumByMonth = { 
+  label: string; 
+  total: number | string 
+};
+
+export type SumByYear = { 
+  label: string; 
+  total: number | string 
+};
+
+export type AccountStats = {
+  dias_conta: number;
+  total_gastos: number;
+  economia_mes: number | string;
+}
+
 export type Usuario = {
   id_usuario: number;
   nome: string;
@@ -80,6 +101,20 @@ export const getSumByCategory = (idUsuario: number, tipo?: "despesa" | "receita"
   api<SumByCategory[]>(
     `/api/analytics/sum-by-category/${idUsuario}${tipo ? `?tipo=${tipo}` : ""}`
   );
+
+export const getSumByDay = (idUsuario: number, days = 7, tipo: "despesa" | "receita" = "despesa") =>
+  api<SumByDay[]>(
+    `/api/analytics/sum-by-day/${idUsuario}?days=${days}&tipo=${tipo}`
+  );
+
+export const getSumByMonth = (idUsuario: number, months = 6) =>
+  api<SumByMonth[]>(`/api/analytics/sum-by-month/${idUsuario}?months=${months}`);
+
+export const getSumByYear = (idUsuario: number, years = 3) =>
+  api<SumByYear[]>(`/api/analytics/sum-by-year/${idUsuario}?years=${years}`);
+
+export const getAccountStats = (idUsuario: number) =>
+  api<AccountStats>(`/api/analytics/account-stats/${idUsuario}`);
 
 export type NewUsuario = {
   nome: string;
