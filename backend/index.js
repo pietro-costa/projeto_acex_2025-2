@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import bcrypt from 'bcryptjs';
 import { pool } from './db/pool.js';
 import 'dotenv/config';
 
@@ -31,11 +32,13 @@ app.post('/api/usuarios', async (req, res) => {
       return res.status(400).json({ error: 'nome, email e senha são obrigatórios' });
     }
 
+    const senha_hash = await bcrypt.hash(String(senha), 10);
+
     const { rows } = await pool.query(
       `insert into usuario (nome, email, senha, renda_fixa, gastos_fixos, meta_economia)
        values ($1, $2, $3, $4, $5, $6)
        returning id_usuario`,
-      [nome, email, senha, toNum(renda_fixa), toNum(gastos_fixos), toNum(meta_economia)]
+      [nome, email, senha_hash, toNum(renda_fixa), toNum(gastos_fixos), toNum(meta_economia)]
     );
 
     res.status(201).json({ id_usuario: rows[0].id_usuario });
@@ -70,7 +73,8 @@ app.post('/api/login', async (req, res) => {
 
     const user = rows[0];
 
-    if (String(user.senha) !== senha) {
+    const ok = await bcrypt.compare(senha, String(user.senha));
+    if (!ok) {
       return res.status(401).json({ error: 'E-mail ou senha incorretos' });
     }
 
@@ -79,6 +83,7 @@ app.post('/api/login', async (req, res) => {
       nome: user.nome,
       email: user.email,
     });
+    
   } catch (e) {
     console.error('POST /api/login erro:', e);
     return res.status(500).json({ error: 'Erro ao fazer login' });
@@ -112,7 +117,11 @@ app.patch('/api/usuarios/:id', async (req, res) => {
     if (renda_fixa !== undefined) { sets.push(`renda_fixa = $${i++}`); vals.push(toNum(renda_fixa)); }
     if (gastos_fixos !== undefined) { sets.push(`gastos_fixos = $${i++}`); vals.push(toNum(gastos_fixos)); }
     if (meta_economia !== undefined) { sets.push(`meta_economia = $${i++}`); vals.push(toNum(meta_economia)); }
-    if (senha !== undefined) { sets.push(`senha = $${i++}`); vals.push(String(senha)); }
+    if (senha !== undefined) {
+      const senha_hashed = await bcrypt.hash(String(senha), 10);
+      sets.push(`senha = $${i++}`);
+      vals.push(senha_hashed);
+    }
 
     if (sets.length === 0) return res.status(400).json({ error: 'Nada para atualizar' });
 
