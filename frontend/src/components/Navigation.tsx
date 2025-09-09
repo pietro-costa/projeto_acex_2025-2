@@ -44,7 +44,7 @@ export const Navigation = ({ currentView, setCurrentView }: NavigationProps) => 
         variant={currentView === "add-expense" ? "default" : "ghost"}
         onClick={() => setCurrentView("add-expense")}
         className="w-full justify-start"
-      >➕ Adicionar Gasto</Button>
+      >➕ Adicionar Transação</Button>
     </DrawerClose>
 
     <DrawerClose asChild>
@@ -77,13 +77,13 @@ export const Navigation = ({ currentView, setCurrentView }: NavigationProps) => 
                 📊 Painel
               </Button>
               
-              {/* Botão ADICIONAR GASTO */}
+              {/* Botão ADICIONAR TRANSAÇÃO */}
               <Button
                 variant={currentView === "add-expense" ? "default" : "ghost"}
                 onClick={() => setCurrentView("add-expense")}
                 className={`text-sm ${currentView === "add-expense" ? "bg-yellow-500 text-slate-900 hover:bg-yellow-600" : "text-white hover:bg-slate-700"}`}
               >
-                ➕ Adicionar Gasto
+                ➕ Adicionar Transação
               </Button>
               
               {/* Botão ANÁLISES */}

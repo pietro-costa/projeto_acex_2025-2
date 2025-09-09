@@ -30,6 +30,7 @@ import {
 import {
   getTransacoes,
   getUsuario,
+  getCategorias,
   type Transacao,
   type Usuario,
 } from "@/lib/api";
@@ -58,20 +59,27 @@ export const DashboardView = () => {
   const [error, setError] = useState<string | null>(null);
   const [usuario, setUsuario] = useState<Usuario | null>(null);
   const [transacoes, setTransacoes] = useState<Transacao[]>([]);
+  const [categoriasDict, setCategoriasDict] = useState<Record<number, string>>({});
 
   const idUsuario = getUserId();
   const nowMonth = new Date().toISOString().slice(0, 7); // YYYY-MM
 
-  // ---- fetch centralizado + re-fetch em evento "dados atualizados" ----
   const fetchAll = async () => {
     setLoading(true);
     try {
-      const [u, t] = await Promise.all([
+      const [u, t, cats] = await Promise.all([
         getUsuario(idUsuario),
         getTransacoes(idUsuario),
+        getCategorias(),
       ]);
       setUsuario(u);
       setTransacoes(t);
+
+      const dict: Record<number, string> = Object.fromEntries(
+        (cats as any[]).map((c: any) => [c.id_categoria, c.nome_categoria])
+      );
+      setCategoriasDict(dict);
+
       setError(null);
     } catch (e: any) {
       setError(e?.message || String(e));
@@ -207,8 +215,8 @@ const saldoSeries: LinePoint[] = useMemo(() => {
     const map = new Map<string, number>();
     for (const t of despesas) {
       if (!t.data_transacao.startsWith(nowMonth)) continue;
-      const key = String(t.id_categoria);
-      map.set(key, (map.get(key) || 0) + Number(t.valor));
+      const nome = categoriasDict[t.id_categoria] ?? `Categoria #${t.id_categoria}`;
+      map.set(nome, (map.get(nome) || 0) + Number(t.valor));
     }
     return Array.from(map.entries()).map(([category, amount]) => ({
       category,
@@ -464,7 +472,7 @@ const monthlyData: MonthlyPoint[] = useMemo(() => {
                         {t.descricao || "Despesa"}
                       </div>
                       <div className="text-xs text-slate-400">
-                        {fmtDia(t.data_transacao)} • Categoria #{t.id_categoria}
+                        {fmtDia(t.data_transacao)} • {categoriasDict[t.id_categoria] ?? `Categoria #${t.id_categoria}`}
                       </div>
                     </div>
                     <div className="font-semibold text-rose-300">
