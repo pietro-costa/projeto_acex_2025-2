@@ -6,11 +6,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
-} from "@/components/ui/chart";
+import { ChartContainer} from "@/components/ui/chart";
 import {
   BarChart,
   Bar,
@@ -23,6 +19,7 @@ import {
   Cell,
   LineChart,
   Line,
+  Tooltip,
 } from "recharts";
 import {
   TrendingUp,
@@ -49,6 +46,12 @@ const fmtBRL = (n: number) =>
     currency: "BRL",
     maximumFractionDigits: 2,
   });
+
+const fmtDia = (s: string) => {
+  const d = new Date(s);
+  return Number.isNaN(d.getTime()) ? s : d.toLocaleDateString("pt-BR"); // 09/09/2025
+};
+const fmtMes = (s: string) => s.replace("-", "/"); // "2025-09" -> "2025/09"
 
 export const DashboardView = () => {
   const [loading, setLoading] = useState(true);
@@ -127,25 +130,71 @@ export const DashboardView = () => {
   );
 
   // saldo diário acumulado (todas as datas)
-  const saldoSeries: LinePoint[] = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const t of transacoes) {
-      const k = t.data_transacao; // YYYY-MM-DD
-      const delta = t.tipo === "receita" ? Number(t.valor) : -Number(t.valor);
-      map.set(k, (map.get(k) || 0) + delta);
-    }
-    const sorted = Array.from(map.entries()).sort((a, b) =>
-      a[0].localeCompare(b[0])
+const saldoSeries: LinePoint[] = useMemo(() => {
+  const RANGE_MONTHS = 6; // mude se quiser outro intervalo
+
+  const start = new Date();
+  start.setMonth(start.getMonth() - (RANGE_MONTHS - 1));
+  start.setDate(1); start.setHours(0,0,0,0);
+
+  const end = new Date();
+  end.setHours(23,59,59,999);
+
+  const normDay = (s: string) => {
+    const d = new Date(s);
+    return Number.isNaN(d.getTime()) ? s.slice(0,10) : d.toISOString().slice(0,10);
+  };
+  const ym = (s: string) => normDay(s).slice(0,7);
+  const inRange = (isoDay: string) => {
+    const d = new Date(isoDay);
+    return d >= start && d <= end;
+  };
+
+  // meses do período
+  const months: string[] = [];
+  for (const d = new Date(start); d <= end; d.setMonth(d.getMonth()+1)) {
+    months.push(d.toISOString().slice(0,7));
+  }
+
+  // mapa de eventos (delta por dia)
+  const ev = new Map<string, number>();
+  const add = (day: string, delta: number) =>
+    ev.set(day, (ev.get(day) || 0) + delta);
+
+  // 1) transações reais dentro do período
+  for (const t of transacoes) {
+    const day = normDay(t.data_transacao);
+    if (!inRange(day)) continue;
+    const delta = t.tipo === "receita" ? Number(t.valor) : -Number(t.valor);
+    add(day, delta);
+  }
+
+  // 2) eventos sintéticos mensais (no período)
+  for (const m of months) {
+    const firstDay = `${m}-01`;
+
+    // renda fixa: só se não houver receita lançada no mês
+    const temReceitaNoMes = transacoes.some(
+      (t) => t.tipo === "receita" && ym(t.data_transacao) === m
     );
-    let acc = 0;
-    return sorted.map(([day, delta]) => {
-      acc += delta;
-      return {
-        day,
-        saldo: Math.round((acc + Number.EPSILON) * 100) / 100,
-      };
-    });
-  }, [transacoes]);
+    if (!temReceitaNoMes && (usuario?.renda_fixa ?? 0) > 0) {
+      add(firstDay, Number(usuario!.renda_fixa));
+    }
+
+    // gastos fixos: sempre subtrai, se houver valor
+    if ((usuario?.gastos_fixos ?? 0) > 0) {
+      add(firstDay, -Number(usuario!.gastos_fixos));
+    }
+  }
+
+  // acumula a partir de 0
+  const days = Array.from(ev.keys()).sort();
+  let acc = 0;
+  return days.map((day) => {
+    acc += ev.get(day)!;
+    return { day, saldo: Math.round((acc + Number.EPSILON) * 100) / 100 };
+  });
+}, [transacoes, usuario?.renda_fixa, usuario?.gastos_fixos]);
 
   // pizza por categoria (apenas DESPESAS DO MÊS ATUAL)
   const categoryData: PiePoint[] = useMemo(() => {
@@ -162,28 +211,40 @@ export const DashboardView = () => {
   }, [despesas, nowMonth]);
 
   // barras por mês (últimos 6) com base nas transações
-  const monthlyData: MonthlyPoint[] = useMemo(() => {
-    const byMonth = new Map<string, { expenses: number; income: number }>();
-    for (const t of transacoes) {
-      const k = t.data_transacao.slice(0, 7);
-      if (!byMonth.has(k)) byMonth.set(k, { expenses: 0, income: 0 });
-      const o = byMonth.get(k)!;
-      if (t.tipo === "despesa") o.expenses += Number(t.valor);
-      else o.income += Number(t.valor);
-    }
-    const months = Array.from(byMonth.keys()).sort().slice(-6);
-    return months.map((k) => ({
+const monthlyData: MonthlyPoint[] = useMemo(() => {
+  // últimos 6 meses como YYYY-MM, mesmo sem transações
+  const months: string[] = Array.from({ length: 6 }, (_, i) => {
+    const d = new Date();
+    d.setMonth(d.getMonth() - (5 - i));  // do mais antigo ao mais recente
+    return d.toISOString().slice(0, 7);  // YYYY-MM
+  });
+
+  return months.map((k) => {
+    const exp = transacoes
+      .filter(t => t.tipo === "despesa" && t.data_transacao.startsWith(k))
+      .reduce((a, t) => a + Number(t.valor), 0);
+
+    const incFromTx = transacoes
+      .filter(t => t.tipo === "receita" && t.data_transacao.startsWith(k))
+      .reduce((a, t) => a + Number(t.valor), 0);
+
+    // regra: se não houver receitas registradas no mês, usa renda fixa como renda do mês
+    const inc = incFromTx > 0 ? incFromTx : Number(usuario?.renda_fixa ?? 0);
+
+    return {
       month: k,
-      expenses: Math.round((byMonth.get(k)!.expenses + Number.EPSILON) * 100) / 100,
-      income: Math.round((byMonth.get(k)!.income + Number.EPSILON) * 100) / 100,
-    }));
-  }, [transacoes]);
+      expenses: Math.round((exp + Number.EPSILON) * 100) / 100,
+      income:   Math.round((inc + Number.EPSILON) * 100) / 100,
+    };
+  });
+}, [transacoes, usuario?.renda_fixa]);
+
 
   const chartConfig = {
-    expenses: { label: "Gastos" },
-    income: { label: "Renda" },
-    saldo: { label: "Saldo" },
-    amount: { label: "Valor" },
+    expenses: { label: "Gastos", color: "hsl(var(--chart-1))" },
+    income: { label: "Renda", color: "hsl(var(--chart-2))" },
+    saldo: { label: "Saldo", color: "hsl(var(--chart-3))" },
+    amount: { label: "Valor", color: "hsl(var(--chart-4))" },
   };
 
   if (loading) return <div className="p-6 text-slate-200">Carregando dados...</div>;
@@ -307,7 +368,9 @@ export const DashboardView = () => {
                       <Cell key={`cell-${i}`} fill={pieColors[i % pieColors.length]} />
                     ))}
                   </Pie>
-                  <ChartTooltip content={<ChartTooltipContent />} />
+                  <Tooltip
+                    formatter={(value: any, name) => [fmtBRL(Number(value)), String(name)]}
+                  />
                 </PieChart>
               </ResponsiveContainer>
             </ChartContainer>
@@ -327,11 +390,14 @@ export const DashboardView = () => {
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={monthlyData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
-                  <XAxis dataKey="month" tick={{ fill: "#94a3b8" }} />
+                  <XAxis dataKey="month" tick={{ fill: "#94a3b8" }} tickFormatter={fmtMes} />
                   <YAxis tick={{ fill: "#94a3b8" }} />
-                  <ChartTooltip content={<ChartTooltipContent />} />
-                  <Bar dataKey="income" name="Renda" />
-                  <Bar dataKey="expenses" name="Gastos" />
+                  <Tooltip 
+                  labelFormatter={(v) => `Mês: ${fmtMes(String(v))}`}
+                  formatter={(value, name) => [fmtBRL(Number(value)), name]}
+                  />
+                  <Bar dataKey="income" name="Renda" fill="#10b981" radius={4} />
+                  <Bar dataKey="expenses" name="Gastos" fill="#ef4444" radius={4}/>
                 </BarChart>
               </ResponsiveContainer>
             </ChartContainer>
@@ -351,10 +417,13 @@ export const DashboardView = () => {
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={saldoSeries}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
-                  <XAxis dataKey="day" tick={{ fill: "#94a3b8" }} />
+                  <XAxis dataKey="day" tick={{ fill: "#94a3b8" }} tickFormatter={fmtDia}/>
                   <YAxis tick={{ fill: "#94a3b8" }} />
-                  <ChartTooltip content={<ChartTooltipContent />} />
-                  <Line type="monotone" dataKey="saldo" name="Saldo" dot={false} />
+                  <Tooltip
+                  labelFormatter={(v) => `Dia: ${fmtDia(String(v))}`}
+                  formatter={(value, name) => [fmtBRL(Number(value)), name]}
+                  />
+                  <Line type="monotone" dataKey="saldo" name="Saldo" stroke="#0f5a65ff" strokeWidth={2} dot={false} />
                 </LineChart>
               </ResponsiveContainer>
             </ChartContainer>
@@ -386,7 +455,7 @@ export const DashboardView = () => {
                         {t.descricao || "Despesa"}
                       </div>
                       <div className="text-xs text-slate-400">
-                        {t.data_transacao} • Categoria #{t.id_categoria}
+                        {fmtDia(t.data_transacao)} • Categoria #{t.id_categoria}
                       </div>
                     </div>
                     <div className="font-semibold text-rose-300">
