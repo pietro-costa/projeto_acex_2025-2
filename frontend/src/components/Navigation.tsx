@@ -1,4 +1,4 @@
-
+import { Drawer, DrawerTrigger, DrawerContent, DrawerClose } from "@/components/ui/drawer";
 import { Button } from "@/components/ui/button";
 
 interface NavigationProps {
@@ -13,7 +13,61 @@ export const Navigation = ({ currentView, setCurrentView }: NavigationProps) => 
         <div className="flex items-center justify-between h-16">
           <div className="flex items-center space-x-4">
             <h1 className="text-xl font-bold text-white">📊 Finty</h1>
-            <div className="flex space-x-1">
+              {/* Mobile (hamburger) */}
+<div className="md:hidden">
+  <Drawer>
+    <DrawerTrigger asChild>
+      <Button variant="ghost" size="icon" aria-label="Abrir menu">
+        {/* ícone de menu */}
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"
+             viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <line x1="3" y1="6" x2="21" y2="6" />
+          <line x1="3" y1="12" x2="21" y2="12" />
+          <line x1="3" y1="18" x2="21" y2="18" />
+        </svg>
+      </Button>
+    </DrawerTrigger>
+
+  <DrawerContent className="max-h-[80vh]">
+  <div className="p-4 space-y-2">
+    <DrawerClose asChild>
+      <Button
+        variant={currentView === "dashboard" ? "default" : "ghost"}
+        onClick={() => setCurrentView("dashboard")}
+        className="w-full justify-start"
+      >📊 Painel</Button>
+    </DrawerClose>
+
+    <DrawerClose asChild>
+      <Button
+        variant={currentView === "add-expense" ? "default" : "ghost"}
+        onClick={() => setCurrentView("add-expense")}
+        className="w-full justify-start"
+      >➕ Adicionar Gasto</Button>
+    </DrawerClose>
+
+    <DrawerClose asChild>
+      <Button
+        variant={currentView === "analytics" ? "default" : "ghost"}
+        onClick={() => setCurrentView("analytics")}
+        className="w-full justify-start"
+      >📈 Análises</Button>
+    </DrawerClose>
+
+    <DrawerClose asChild>
+      <Button
+        variant={currentView === "settings" ? "default" : "ghost"}
+        onClick={() => setCurrentView("settings")}
+        className="w-full justify-start"
+      >⚙️ Configurações</Button>
+    </DrawerClose>
+  </div>
+</DrawerContent>
+  </Drawer>
+</div>
+
+            <div className="hidden md:flex space-x-1">
               {/* Botão PAINEL */}
               <Button
                 variant={currentView === "dashboard" ? "default" : "ghost"}

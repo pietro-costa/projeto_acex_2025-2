@@ -46,8 +46,8 @@ export const AnalyticsView = () => {
             <CardTitle className="text-white">Renda vs Gastos</CardTitle>
             <CardDescription className="text-slate-400">Comparação mensal dos últimos 5 meses</CardDescription>
           </CardHeader>
-          <CardContent>
-            <ChartContainer config={chartConfig} className="h-[300px]">
+          <CardContent className="min-w-0">
+            <ChartContainer config={chartConfig} className="w-full aspect-[4/3] md:aspect-video">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={monthlyData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
@@ -67,8 +67,8 @@ export const AnalyticsView = () => {
             <CardTitle className="text-white">Gastos por Categoria</CardTitle>
             <CardDescription className="text-slate-400">Detalhamento deste mês</CardDescription>
           </CardHeader>
-          <CardContent>
-            <ChartContainer config={chartConfig} className="h-[300px]">
+          <CardContent className="min-w-0">
+            <ChartContainer config={chartConfig} className="w-full aspect-[4/3] md:aspect-video">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
@@ -97,8 +97,8 @@ export const AnalyticsView = () => {
           <CardTitle className="text-white">Tendências de Gastos por Categoria</CardTitle>
           <CardDescription className="text-slate-400">Acompanhe como seus hábitos de gasto mudam ao longo do tempo</CardDescription>
         </CardHeader>
-        <CardContent>
-          <ChartContainer config={chartConfig} className="h-[400px]">
+        <CardContent className="min-w-0">
+          <ChartContainer config={chartConfig} className="w-full aspect-[4/3] md:aspect-video">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={trendData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#475569" />

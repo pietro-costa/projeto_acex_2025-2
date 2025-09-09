@@ -13,7 +13,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { applyTheme, getStoredTheme, setStoredTheme, systemPrefersDark, type Theme } from "@/lib/theme";
 import { Switch } from "@/components/ui/switch";
+import { on } from "events";
 
 export const SettingsView = () => {
   const id = getUserId();
@@ -34,8 +36,14 @@ export const SettingsView = () => {
   const [totalGastos, setTotalGastos] = useState(0);
   const [economiaMes, setEconomiaMes] = useState<number>(0);
 
-  // preferências locais (ainda não persistidas)
-  const [isDarkTheme, setIsDarkTheme] = useState(true);
+  const [theme, setTheme] = useState<Theme>(() => getStoredTheme() ?? 'system');
+    useEffect(() => {
+    applyTheme(theme);
+    setStoredTheme(theme);
+  }, [theme])
+
+  const isDarkEffective = theme === 'dark' || (theme === 'system' && systemPrefersDark());
+
 
   function formatBRL(v: number | string) {
     const n = Number(v ?? 0);
@@ -174,8 +182,9 @@ export const SettingsView = () => {
                 </p>
               </div>
               <Switch
-                checked={isDarkTheme}
-                onCheckedChange={setIsDarkTheme} // Troca entre claro e escuro
+                checked={isDarkEffective}
+                onCheckedChange={(on) => setTheme(on ? 'dark' : 'light')} // Troca entre claro e escuro
+                aria-label="Alternar tema escuro"
               />
             </div>
 
@@ -183,7 +192,9 @@ export const SettingsView = () => {
             <div className="p-3 bg-slate-700 rounded-lg">
               <p className="text-sm text-white">
                 🌙 Tema atual: <span className="font-bold">
-                  {isDarkTheme ? "Escuro" : "Claro"}
+                  {theme === 'system'
+                    ? (isDarkEffective ? 'Sistema (Escuro)' : 'Sistema (Claro)')
+                    : theme === 'dark' ? 'Escuro' : 'Claro'}
                 </span>
               </p>
             </div>

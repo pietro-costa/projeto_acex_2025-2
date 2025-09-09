@@ -290,8 +290,8 @@ export const DashboardView = () => {
               Distribuição das despesas em {nowMonth}
             </CardDescription>
           </CardHeader>
-          <CardContent>
-            <ChartContainer config={chartConfig} className="h-[300px]">
+          <CardContent className="min-w-0">
+            <ChartContainer config={chartConfig} className="w-full aspect-[4/3] md:aspect-video">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
@@ -322,8 +322,8 @@ export const DashboardView = () => {
               Renda vs Gastos (últimos 6 meses)
             </CardDescription>
           </CardHeader>
-          <CardContent>
-            <ChartContainer config={chartConfig} className="h-[300px]">
+          <CardContent className="min-w-0"> 
+            <ChartContainer config={chartConfig} className="w-full aspect-[4/3] md:aspect-video">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={monthlyData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
@@ -346,8 +346,8 @@ export const DashboardView = () => {
             <CardTitle className="text-white">Saldo Acumulado</CardTitle>
             <CardDescription className="text-slate-400">Evolução diária</CardDescription>
           </CardHeader>
-          <CardContent>
-            <ChartContainer config={chartConfig} className="h-[280px]">
+          <CardContent className="min-w-0">
+            <ChartContainer config={chartConfig} className="w-full aspect-[4/3] md:aspect-video">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={saldoSeries}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#475569" />

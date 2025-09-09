@@ -161,8 +161,8 @@ useEffect(() => {
             Visualize seus padrões de gastos ao longo do tempo
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <ChartContainer config={chartConfig} className="h-[400px]">
+        <CardContent className="min-w-0">
+          <ChartContainer config={chartConfig} className="w-full aspect-[4/3] md:aspect-video">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={getCurrentData()}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
@@ -198,8 +198,8 @@ useEffect(() => {
             Veja como seus gastos evoluem no período selecionado
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <ChartContainer config={chartConfig} className="h-[300px]">
+        <CardContent className="min-w-0">
+          <ChartContainer config={chartConfig} className="w-full aspect-[4/3] md:aspect-video">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={getCurrentData()}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
