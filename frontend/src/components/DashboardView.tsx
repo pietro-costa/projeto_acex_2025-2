@@ -109,15 +109,21 @@ export const DashboardView = () => {
     [despesas, nowMonth]
   );
 
+  // >>> ADIÇÃO: receitas do mês atual
+  const receitasMes = useMemo(
+    () =>
+      receitas
+        .filter((t) => t.data_transacao.startsWith(nowMonth))
+        .reduce((a, b) => a + Number(b.valor), 0),
+    [receitas, nowMonth]
+  );
+
   // renda fixa e gastos fixos do cadastro
   const rendaFixa = Number(usuario?.renda_fixa ?? 0);
   const gastosFixos = Number(usuario?.gastos_fixos ?? 0);
 
-  // *** Receita líquida do mês *** (o que você pediu para o "Receitas")
-  const receitaLiquidaMes = Math.max(
-    rendaFixa - (gastosFixos + despesasMes),
-    0
-  );
+  // >>> TROCA: Saldo do mês = (renda_fixa + receitasMes) − (gastos_fixos + despesasMes)
+  const saldoMes = (rendaFixa + receitasMes) - (gastosFixos + despesasMes);
 
   // totais absolutos (todas as datas) — ainda usados em gráficos de evolução/saldo
   const totalReceitas = useMemo(
@@ -275,14 +281,17 @@ const monthlyData: MonthlyPoint[] = useMemo(() => {
           <CardHeader>
             <CardTitle className="text-white flex items-center gap-2">
               <TrendingUp className="w-5 h-5 text-emerald-500" />
-              Receitas (líquida do mês)
+              {/* >>> TROCA: título do card */}
+              Saldo do mês
             </CardTitle>
             <CardDescription className="text-slate-400">
-              renda_fixa − (gastos_fixos + despesas do mês)
+              {/* >>> TROCA: descrição do card */}
+              renda_fixa + receitas do mês − (gastos_fixos + despesas do mês)
             </CardDescription>
           </CardHeader>
           <CardContent className="text-2xl font-semibold text-emerald-400">
-            {fmtBRL(receitaLiquidaMes)}
+            {/* >>> TROCA: valor exibido */}
+            {fmtBRL(saldoMes)}
           </CardContent>
         </Card>
 

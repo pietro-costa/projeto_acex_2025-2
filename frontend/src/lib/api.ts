@@ -71,13 +71,10 @@ export type Usuario = {
 export const getHealth = () =>
   api<{ ok: boolean; db?: boolean; hasEnv?: boolean }>(`/api/health`);
 
-export const getCategorias = (arg?: "despesa" | "receita" | number) => {
-  if (typeof arg === "number") {
-    return api<Categoria[]>(`/api/categorias/${arg}`);
-  }
-  const q = arg ? `?tipo=${arg}` : "";
-  return api<Categoria[]>(`/api/categorias${q}`);
-};
+export type TipoMov = 'despesa' | 'receita';
+
+export const getCategorias = (tipo?: TipoMov) =>
+  api<any[]>(`/api/categorias${tipo ? `?tipo=${tipo}` : ''}`);
 
 export type NewTransacao = {
   id_usuario: number;
@@ -85,13 +82,13 @@ export type NewTransacao = {
   valor: number | string;
   descricao?: string | null;
   data_transacao?: string;
-  tipo?: "receita" | "despesa";
+  tipo: "receita" | "despesa";
 };
 
-export const postTransacao = (body: NewTransacao) =>
-  api<{ id_transacao: number }>(`/api/transacoes`, {
-    method: "POST",
-    body: JSON.stringify(body),
+export const postTransacao = (t: NewTransacao) =>
+  api(`/api/transacoes`, {
+    method: 'POST',
+    body: JSON.stringify(t),
   });
 
 export const getTransacoes = (idUsuario: number, tipo?: "despesa" | "receita") =>

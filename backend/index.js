@@ -4,9 +4,6 @@ import bcrypt from 'bcryptjs';
 import { pool } from './db/pool.js';
 import 'dotenv/config';
 
-console.log("PGHOST:", process.env.PGHOST);
-
-
 const app = express();
 app.use(cors());
 app.use(express.json());
@@ -136,18 +133,22 @@ app.patch('/api/usuarios/:id', async (req, res) => {
 
 async function handleListCategorias(req, res) {
   try {
-    const { tipo } = req.query;
-    if (tipo && !isTipo(tipo)) return res.status(400).json({ error: 'tipo inválido' });
+    const tipo = req.query?.tipo;
+    if (tipo === 'despesa' || tipo === 'receita') {
+      const { rows } = await pool.query(
+        'select id_categoria, nome_categoria, tipo from categoria where tipo = $1 order by nome_categoria',
+        [tipo]
+      );
+      return res.json(rows);
+    }
 
-    const sql = tipo
-    ? 'select id_categoria, nome_categoria, tipo from categoria where tipo = $1 order by nome_categoria'
-    : 'select id_categoria, nome_categoria, tipo from categoria order by id_categoria, tipo, nome_categoria';
-
-    const { rows } = await pool.query(sql, tipo? [tipo] : []);
-    res.json(rows);
+    const { rows } = await pool.query(
+      'select id_categoria, nome_categoria, tipo from categoria order by tipo, nome_categoria'
+    );
+    return res.json(rows);
   } catch (e) {
-    console.error('GET /api/categorias erro:', e);
-    res.status(500).json({ error: 'Erro ao listar categorias' });
+    console.error(e);
+    return res.status(500).json({ error: 'erro ao listar categorias' });
   }
 }
 
@@ -158,39 +159,56 @@ app.get('/api/categorias/:id_usuario', handleListCategorias);
 
 app.post('/api/transacoes', async (req, res) => {
   try {
-    const { id_usuario, id_categoria, descricao, valor, tipo: tipoDoBody, data_transacao } = req.body;
+    const {
+      id_usuario,
+      id_categoria,
+      descricao,
+      valor,
+      data_transacao,
+      tipo: tipoBody,
+    } = req.body ?? {};
 
-    if (!id_usuario || !id_categoria) {
-      return res.status(400).json({ error: 'id_usuario e id_categoria são obrigatórios' });
+    if (!id_usuario || !id_categoria || !valor || !data_transacao) {
+      return res.status(400).json({ error: 'id_usuario, id_categoria, valor e data_transacao são obrigatórios' });
     }
 
-    const cat = await pool.query(
+    // pega a categoria e valida o tipo
+    const { rows: catRows } = await pool.query(
       'select id_categoria, tipo from categoria where id_categoria = $1',
       [id_categoria]
     );
-    if (!cat.rows.length) return res.status(400).json({ error: 'Categoria inexistente' });
+    if (!catRows.length) return res.status(400).json({ error: 'categoria inválida' });
 
-    const tipoDaCategoria = cat.rows[0].tipo;
+    const tipoCategoria = catRows[0].tipo;
+    const tipo =
+      (tipoBody === 'despesa' || tipoBody === 'receita') ? tipoBody : tipoCategoria;
 
-    const tipoFinal = tipoDoBody ?? tipoDaCategoria;
-    if (tipoFinal !== tipoDaCategoria) {
-      return res.status(400).json({ error: 'tipo da transação não corresponde ao tipo da categoria' });
+    if (tipo !== tipoCategoria) {
+      return res.status(400).json({ error: 'tipo não corresponde à categoria escolhida' });
     }
 
-    const val = toNum(valor);
-    if (!(val >= 0)) return res.status(400).json({ error: 'valor inválido' });
+    const valorNum = typeof valor === 'number'
+      ? valor
+      : Number(String(valor).replace(/\./g, '').replace(',', '.'));
 
-    const { rows } = await pool.query(
-      `insert into transacao (id_usuario, id_categoria, descricao, valor, tipo, data_transacao)
-       values ($1, $2, $3, $4, $5, coalesce($6::date, current_date))
-       returning id_transacao`,
-      [id_usuario, id_categoria, descricao ?? null, val, tipoFinal, data_transacao ?? null]
-    );
+    const sql = `
+      insert into transacao (id_usuario, id_categoria, descricao, valor, data_transacao, tipo)
+      values ($1, $2, $3, $4, $5, $6)
+      returning id_transacao
+    `;
+    const { rows } = await pool.query(sql, [
+      id_usuario,
+      id_categoria,
+      descricao ?? null,
+      valorNum,
+      data_transacao,
+      tipo,
+    ]);
 
-    res.status(201).json({ id_transacao: rows[0].id_transacao });
+    return res.status(201).json({ id_transacao: rows[0].id_transacao });
   } catch (e) {
-    console.error('POST /transacoes erro:', e);
-    res.status(500).json({ error: 'Erro ao criar transação' });
+    console.error(e);
+    return res.status(500).json({ error: 'erro ao criar transação' });
   }
 });
 

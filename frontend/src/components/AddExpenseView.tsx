@@ -23,14 +23,17 @@ export function AddExpenseView() {
   const [valor, setValor] = useState<string>("");
   const [data, setData] = useState<string>(new Date().toISOString().slice(0, 10));
   const [descricao, setDescricao] = useState<string>("");
+  const [tipo, setTipo] = useState<'despesa' | 'receita'>('despesa');
 
   const [saving, setSaving] = useState(false);
   const [ok, setOk] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    getCategorias('despesa').then(setCategorias);
-  });
+    getCategorias(tipo).then(setCategorias).catch(console.error);
+
+    setIdCategoria(undefined as any);
+  }, [tipo]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -45,10 +48,11 @@ export function AddExpenseView() {
 
       await postTransacao({
         id_usuario: idUsuario,
-        id_categoria: idCategoria,
+        id_categoria: Number(idCategoria),
         valor: v,
         data_transacao: data, // "YYYY-MM-DD"
         descricao: descricao || null,
+        tipo,
       });
 
       // avisa o Dashboard para re-carregar imediatamente
@@ -69,10 +73,28 @@ export function AddExpenseView() {
   return (
     <Card className="bg-slate-800 border-slate-700 max-w-xl">
       <CardHeader>
-        <CardTitle className="text-white">Adicionar Gasto</CardTitle>
+        <CardTitle className="text-white">Adicionar Transação</CardTitle>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
+          
+          <div className="space-y-2">
+            <Label className="text-slate-200">Tipo</Label>
+            <Select
+              value={tipo}
+              onValueChange={(v) => { setTipo(v as "despesa" | "receita");
+              setIdCategoria(undefined as any); }}
+            >
+              <SelectTrigger className="bg-slate-900 text-slate-100">
+                <SelectValue placeholder="Selecione o tipo" />
+              </SelectTrigger>
+              <SelectContent className="bg-slate-900 text-slate-100">
+                <SelectItem value="despesa">Despesa</SelectItem>
+                <SelectItem value="receita">Receita</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
           <div className="space-y-2">
             <Label className="text-slate-200">Categoria</Label>
             <Select onValueChange={(v) => setIdCategoria(Number(v))}>
@@ -121,10 +143,10 @@ export function AddExpenseView() {
           </div>
 
           {error && <div className="text-red-400 text-sm">{error}</div>}
-          {ok && <div className="text-emerald-400 text-sm">Gasto adicionado!</div>}
+          {ok && <div className="text-emerald-400 text-sm">Transação adicionada!</div>}
 
           <Button type="submit" disabled={saving}>
-            {saving ? "Salvando..." : "Salvar Gasto"}
+            {saving ? "Salvando..." : "Salvar Transação"}
           </Button>
         </form>
       </CardContent>
