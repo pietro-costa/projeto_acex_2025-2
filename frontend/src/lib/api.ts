@@ -1,14 +1,34 @@
 const BASE = import.meta.env.VITE_API_URL;
 
+const getToken = () => {
+  try { return localStorage.getItem("token"); } catch { return null; }
+};
+
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = getToken();
   const res = await fetch(`${BASE}${path}`, {
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
     ...init,
   });
-  if (!res.ok) {
-    const msg = await res.text().catch(() => res.statusText);
-    throw new Error(msg || res.statusText);
-  }
+if (!res.ok) {
+  if (res.status === 401 || res.status === 403) {
+    try {
+      localStorage.removeItem("token");
+      localStorage.removeItem("id_usuario");
+    } catch {}
+    if (typeof window !== "undefined" && !location.pathname.includes("login")) {
+      location.href = "/login";
+    }
+    throw new Error("Sessão expirada. Faça login novamente.");
+   }
+
+  const msg = await res.text().catch(() => res.statusText);
+  throw new Error(msg || res.statusText);
+}
+
   return res.json() as Promise<T>;
 }
 
@@ -132,10 +152,10 @@ export const postUsuario = (u: NewUsuario) =>
 export const getUsuario = (id: number) => api<Usuario>(`/api/usuarios/${id}`);
 
 export const postLogin = (email: string, senha: string) =>
-  api<{ id_usuario: number; nome: string; email: string }>(`/api/login`, {
-    method: "POST",
-    body: JSON.stringify({ email, senha }),
-  });
+  api<{ token: string; user: { id_usuario: number; nome: string; email: string } }>(
+    `/api/login`,
+    { method: "POST", body: JSON.stringify({ email, senha }) }
+  );
 
 export const patchUsuario = (
   id: number,

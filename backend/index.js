@@ -3,6 +3,32 @@ import cors from 'cors';
 import bcrypt from 'bcryptjs';
 import { pool } from './db/pool.js';
 import 'dotenv/config';
+import jwt from 'jsonwebtoken';
+
+const JWT_SECRET = process.env.JWT_SECRET || 'dev-change-me';
+const JWT_EXPIRES = process.env.JWT_EXPIRES || '1d';
+
+function auth(req, res, next) {
+  const h = req.headers.authorization || '';
+  const [scheme, token] = h.split(' ');
+  if (scheme !== 'Bearer' || !token) return res.status(401).json({ error: 'token ausente' });
+  try {
+    req.user = jwt.verify(token, JWT_SECRET);
+    return next();
+  } catch {
+    return res.status(401).json({ error: 'token inválido' });
+  }
+}
+
+function sameUserParam(paramName) {
+  return (req, res, next) => {
+    const idFromParam = Number(req.params[paramName]);
+    if (!Number.isFinite(idFromParam)) return res.status(400).json({ error: 'id inválido' });
+    const idFromToken = Number(req.user?.sub);
+    if (idFromParam !== idFromToken) return res.status(403).json({ error: 'forbidden' });
+    return next();
+  };
+}
 
 const app = express();
 app.use(cors());
@@ -50,44 +76,51 @@ app.post('/api/usuarios', async (req, res) => {
 
 app.post('/api/login', async (req, res) => {
   try {
-    const emailRaw = req.body?.email ?? '';
-    const senhaRaw = req.body?.senha ?? '';
-    const email = String(emailRaw).trim();
-    const senha = String(senhaRaw);
+    const email = String(req.body?.email || '').trim();
+    const senha = String(req.body?.senha || '');
 
     if (!email || !senha) {
       return res.status(400).json({ error: 'email e senha são obrigatórios' });
     }
 
-    const { rows } = await pool.query(
-      'select id_usuario, nome, email, senha from usuario where lower(email) = lower($1)',
-      [email]
-    );
-
-    if (!rows.length) {
-      return res.status(401).json({ error: 'E-mail ou senha incorretos' });
-    }
+    // pega o usuário
+    const q = `
+      select id_usuario, nome, email, senha
+      from usuario
+      where lower(email) = lower($1)
+      limit 1
+    `;
+    const { rows } = await pool.query(q, [email]);
+    if (!rows.length) return res.status(401).json({ error: 'credenciais inválidas' });
 
     const user = rows[0];
 
-    const ok = await bcrypt.compare(senha, String(user.senha));
-    if (!ok) {
-      return res.status(401).json({ error: 'E-mail ou senha incorretos' });
-    }
+    // compara hash da senha
+    const ok = await bcrypt.compare(senha, user.senha);
+    if (!ok) return res.status(401).json({ error: 'credenciais inválidas' });
+
+    // emite JWT
+    const token = jwt.sign(
+      { sub: user.id_usuario, nome: user.nome, email: user.email },
+      JWT_SECRET,
+      { expiresIn: JWT_EXPIRES }
+    );
 
     return res.json({
-      id_usuario: user.id_usuario,
-      nome: user.nome,
-      email: user.email,
+      token,
+      user: {
+        id_usuario: user.id_usuario,
+        nome: user.nome,
+        email: user.email,
+      }
     });
-    
   } catch (e) {
-    console.error('POST /api/login erro:', e);
-    return res.status(500).json({ error: 'Erro ao fazer login' });
+    console.error('[LOGIN ERROR]', e);
+    return res.status(500).json({ error: 'erro no login' });
   }
 });
 
-app.get('/api/usuarios/:id', async (req, res) => {
+app.get('/api/usuarios/:id', auth, sameUserParam('id'), async (req, res) => {
   try {
     const { id } = req.params;
     const { rows } = await pool.query('select * from usuario where id_usuario = $1', [id]);
@@ -99,7 +132,7 @@ app.get('/api/usuarios/:id', async (req, res) => {
   }
 });
 
-app.patch('/api/usuarios/:id', async (req, res) => {
+app.patch('/api/usuarios/:id', auth, sameUserParam('id'), async (req, res) => {
   try {
     const id = Number(req.params.id);
     if (!Number.isFinite(id)) return res.status(400).json({ error: 'id inválido' });
@@ -157,7 +190,7 @@ app.get('/api/categorias', handleListCategorias);
 // compativel com front antigo
 app.get('/api/categorias/:id_usuario', handleListCategorias);
 
-app.post('/api/transacoes', async (req, res) => {
+app.post('/api/transacoes', auth, async (req, res) => {
   try {
     const {
       id_usuario,
@@ -167,6 +200,10 @@ app.post('/api/transacoes', async (req, res) => {
       data_transacao,
       tipo: tipoBody,
     } = req.body ?? {};
+
+    if (Number(id_usuario) !== Number(req.user?.sub)) {
+      return res.status(403).json({ error: 'forbidden' });
+    }
 
     if (!id_usuario || !id_categoria || !valor || !data_transacao) {
       return res.status(400).json({ error: 'id_usuario, id_categoria, valor e data_transacao são obrigatórios' });
@@ -212,7 +249,7 @@ app.post('/api/transacoes', async (req, res) => {
   }
 });
 
-app.get('/api/transacoes/:id_usuario', async (req, res) => {
+app.get('/api/transacoes/:id_usuario', auth, sameUserParam('id_usuario'), async (req, res) => {
   try {
     const { id_usuario } = req.params;
     const { tipo } = req.query;

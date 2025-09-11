@@ -23,8 +23,9 @@ export const AuthForm = ({ onLogin }: AuthFormProps) => {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const res = await postLogin(email.trim(), password);
-      localStorage.setItem("id_usuario", String(res.id_usuario));
+      const { token, user } = await postLogin(email.trim(), password);
+      localStorage.setItem("token", token);
+      localStorage.setItem("id_usuario", String(user.id_usuario));
       onLogin();
     } catch (err: any) {
       console.error(err);
