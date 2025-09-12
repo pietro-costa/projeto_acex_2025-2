@@ -13,21 +13,35 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
     },
     ...init,
   });
-if (!res.ok) {
-  if (res.status === 401 || res.status === 403) {
-    try {
-      localStorage.removeItem("token");
-      localStorage.removeItem("id_usuario");
-    } catch {}
-    if (typeof window !== "undefined" && !location.pathname.includes("login")) {
-      location.href = "/login";
-    }
-    throw new Error("Sessão expirada. Faça login novamente.");
-   }
 
-  const msg = await res.text().catch(() => res.statusText);
-  throw new Error(msg || res.statusText);
-}
+  if (!res.ok) {
+    let data: any = null;
+    try {
+      data = await res.json();
+    } catch {
+    }
+
+    if (res.status === 403 && data?.code === "EMAIL_NOT_VERIFIED") {
+      const err: any = new Error("EMAIL_NOT_VERIFIED");
+      err.code = "EMAIL_NOT_VERIFIED";
+      err.payload = data;
+      throw err;
+    }
+
+    if (res.status === 401 || res.status === 403) {
+      try {
+        localStorage.removeItem("token");
+        localStorage.removeItem("id_usuario");
+      } catch {}
+      if (typeof window !== "undefined" && !location.pathname.includes("login")) {
+        location.href = "/login";
+      }
+      throw new Error("Sessão expirada. Faça login novamente.");
+    }
+
+    const msg = data?.error || data?.message || (await res.text().catch(() => res.statusText));
+    throw new Error(msg || res.statusText);
+  }
 
   return res.json() as Promise<T>;
 }
@@ -165,5 +179,12 @@ export const patchUsuario = (
     method: "PATCH",
     body: JSON.stringify(b),
   });
+
+export async function resendVerificationByEmail(email: string) {
+  return api<{ message: string }>('/api/usuarios/resend-verification', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  });
+}
 
 export { api };

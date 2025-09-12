@@ -1,11 +1,11 @@
-
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { postUsuario, postLogin } from "@/lib/api";
+import { toast } from "@/components/ui/use-toast";
+import { postUsuario, postLogin, resendVerificationByEmail } from "@/lib/api";
 
 interface AuthFormProps {
   onLogin: () => void;
@@ -16,9 +16,23 @@ export const AuthForm = ({ onLogin }: AuthFormProps) => {
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [registrationStep, setRegistrationStep] = useState(1);
+  const [activeTab, setActiveTab] = useState<'login' | 'register'>('login');
   const [monthlyIncome, setMonthlyIncome] = useState("");
   const [fixedExpenses, setFixedExpenses] = useState("");
   const [savingsGoal, setSavingsGoal] = useState(""); // Meta de economia mensal
+  const [showResend, setShowResend] = useState(false);
+  const [resending, setResending] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("verified") === "1") {
+      toast({
+        title: "E-mail verificado!",
+        description: "Agora você já pode realizar o login.",
+      });
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -28,13 +42,46 @@ export const AuthForm = ({ onLogin }: AuthFormProps) => {
       localStorage.setItem("id_usuario", String(user.id_usuario));
       onLogin();
     } catch (err: any) {
-      console.error(err);
-      alert("Falha ao entrar: " + (err?.message || "E-mail ou senha incorretos"));
+      if (err?.code === "EMAIL_NOT_VERIFIED" || err?.message === "EMAIL_NOT_VERIFIED") {
+        setShowResend(true);
+        toast({
+          title: "E-mail não verificado",
+          description: "Confirme o e-mail que enviamos. Se não recebeu, você pode solicitar um novo envio abaixo.",
+        });
+        return;
+      }
+      if (err?.message === "AUTH_EXPIRED") {
+        alert("Falha ao entrar: Sessão expirada. Faça login novamente.");
+      return;
+    }
+    alert("Falha ao entrar: " + (err?.message || "E-mail ou senha incorretos"));
+  }
+};
+
+  const handleResend = async () => {
+    try {
+      setResending(true);
+      await resendVerificationByEmail(email.trim());
+      toast({
+        title: "Verificação reenviada",
+        description: "Se existir uma conta com este e-mail, um novo link foi enviado.",
+      });
+    } catch (e: any) {
+      toast({
+        title: "Não foi possível reenviar",
+        description: e?.message || "Tente novamente em instantes.",
+      });
+    } finally {
+      setResending(false);
     }
   };
 
   const handleRegisterStep1 = (e: React.FormEvent) => {
     e.preventDefault();
+    const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+    if (!name.trim()) { alert('Informe seu nome.'); return; }
+    if (!emailOk) { alert('Informe um e-mail válido.'); return; }
+    if (!password || password.length < 6) { alert('A senha deve ter pelo menos 6 caracteres.'); return; }
     setRegistrationStep(2);
   };
 
@@ -50,9 +97,12 @@ export const AuthForm = ({ onLogin }: AuthFormProps) => {
         senha: password || ""
       };
       const res = await postUsuario(body as any);
-      const id = (res as any).id_usuario || (res as any).id;
-      localStorage.setItem('id_usuario', String(id));
-      onLogin();
+      // Sucesso: volta para o login sem autenticar automaticamente
+      setRegistrationStep(1);
+      setActiveTab('login');
+      setPassword('');
+      toast({ title: 'Conta criada!', description: 'Enviamos um e-mail de verificação. Confirme para fazer login.' });
+      
     } catch (err:any) {
       console.error(err);
       alert('Falha ao cadastrar usuário: ' + (err?.message || 'erro desconhecido'));
@@ -75,12 +125,12 @@ export const AuthForm = ({ onLogin }: AuthFormProps) => {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Tabs defaultValue="login" className="space-y-4">
+          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'login' | 'register')} className="space-y-4">
             <TabsList className="grid w-full grid-cols-2 bg-slate-700">
               <TabsTrigger value="login" className="text-white data-[state=active]:bg-yellow-500 data-[state=active]:text-slate-900">Entrar</TabsTrigger>
               <TabsTrigger value="register" className="text-white data-[state=active]:bg-yellow-500 data-[state=active]:text-slate-900">Registrar</TabsTrigger>
             </TabsList>
-            
+
             <TabsContent value="login">
               <form onSubmit={handleLogin} className="space-y-4">
                 <div className="space-y-2">
@@ -111,8 +161,24 @@ export const AuthForm = ({ onLogin }: AuthFormProps) => {
                   Entrar
                 </Button>
               </form>
+
+              {showResend && (
+                <div className="mt-3 text-center">
+                  <p className="text-sm text-slate-400 mb-2">
+                    Não recebeu o e-mail de verificação?
+                  </p>
+                  <Button
+                    type="button"
+                      onClick={handleResend}
+                      disabled={resending || !email.trim()}
+                      className="bg-yellow-500 hover:bg-yellow-600 text-slate-900 font-semibold"
+                  >
+                    {resending ? "Enviando..." : "Reenviar verificação"}
+                  </Button>
+                </div>
+              )}
             </TabsContent>
-            
+
             <TabsContent value="register">
               {registrationStep === 1 ? (
                 <div>
@@ -133,9 +199,9 @@ export const AuthForm = ({ onLogin }: AuthFormProps) => {
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="reg-email" className="text-white">E-mail</Label>
+                      <Label htmlFor="email" className="text-white">E-mail</Label>
                       <Input
-                        id="reg-email"
+                        id="email"
                         type="email"
                         placeholder="Digite seu e-mail"
                         value={email}
@@ -145,9 +211,9 @@ export const AuthForm = ({ onLogin }: AuthFormProps) => {
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="reg-password" className="text-white">Senha</Label>
+                      <Label htmlFor="password" className="text-white">Senha</Label>
                       <Input
-                        id="reg-password"
+                        id="password"
                         type="password"
                         placeholder="Crie uma senha"
                         value={password}
@@ -157,18 +223,18 @@ export const AuthForm = ({ onLogin }: AuthFormProps) => {
                       />
                     </div>
                     <Button type="submit" className="w-full bg-yellow-500 hover:bg-yellow-600 text-slate-900 font-semibold">
-                      Próxima Etapa
+                      Continuar
                     </Button>
                   </form>
                 </div>
               ) : (
                 <div>
                   <div className="mb-4 text-center">
-                    <p className="text-sm text-slate-400">Etapa 2 de 2 - Informações Financeiras</p>
+                    <p className="text-sm text-slate-400">Etapa 2 de 2 - Dados Financeiros</p>
                   </div>
                   <form onSubmit={handleRegisterStep2} className="space-y-4">
                     <div className="space-y-2">
-                      <Label htmlFor="monthly-income" className="text-white">Renda Fixa Mensal</Label>
+                      <Label htmlFor="monthly-income" className="text-white">Renda Mensal</Label>
                       <Input
                         id="monthly-income"
                         type="number"
@@ -202,23 +268,15 @@ export const AuthForm = ({ onLogin }: AuthFormProps) => {
                         id="savings-goal"
                         type="number"
                         step="0.01"
-                        placeholder="Quanto pretende guardar por mês? (R$)"
+                        placeholder="Quanto deseja economizar por mês? (R$)"
                         value={savingsGoal}
                         onChange={(e) => setSavingsGoal(e.target.value)}
-                        required
                         className="bg-slate-700 border-slate-600 text-white placeholder:text-slate-400"
                       />
-                      <p className="text-xs text-slate-400">
-                        Defina sua meta de economia mensal para acompanharmos seu progresso
-                      </p>
                     </div>
-                    <div className="flex space-x-3">
-                      <Button 
-                        type="button" 
-                        variant="outline" 
-                        onClick={handleBackToStep1}
-                        className="flex-1 border-slate-600 text-white hover:bg-slate-700"
-                      >
+
+                    <div className="flex gap-2">
+                      <Button type="button" onClick={handleBackToStep1} className="flex-1 bg-slate-700 hover:bg-slate-600 text-white">
                         Voltar
                       </Button>
                       <Button type="submit" className="flex-1 bg-yellow-500 hover:bg-yellow-600 text-slate-900 font-semibold">

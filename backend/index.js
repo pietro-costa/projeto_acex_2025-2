@@ -4,9 +4,11 @@ import bcrypt from 'bcryptjs';
 import { pool } from './db/pool.js';
 import 'dotenv/config';
 import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
+import { sendVerificationEmail } from './utils/mailer.js';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-change-me';
-const JWT_EXPIRES = process.env.JWT_EXPIRES || '1d';
+const JWT_SECRET = process.env.JWT_SECRET;
+const JWT_EXPIRES = process.env.JWT_EXPIRES;
 
 function auth(req, res, next) {
   const h = req.headers.authorization || '';
@@ -48,8 +50,9 @@ app.get('/api/health', async (_req, res) => {
 });
 
 app.post('/api/usuarios', async (req, res) => {
+  const client = await pool.connect();
   try {
-    const { nome, email, senha, renda_fixa, gastos_fixos, meta_economia } = req.body;
+    const { nome, email, senha, renda_fixa = 0, gastos_fixos = 0, meta_economia = 0 } = req.body;
 
     if (!nome || !email || !senha) {
       return res.status(400).json({ error: 'nome, email e senha são obrigatórios' });
@@ -57,49 +60,170 @@ app.post('/api/usuarios', async (req, res) => {
 
     const senha_hash = await bcrypt.hash(String(senha), 10);
 
-    const { rows } = await pool.query(
-      `insert into usuario (nome, email, senha, renda_fixa, gastos_fixos, meta_economia)
-       values ($1, $2, $3, $4, $5, $6)
-       returning id_usuario`,
-      [nome, email, senha_hash, toNum(renda_fixa), toNum(gastos_fixos), toNum(meta_economia)]
-    );
+    const token = newVerificationToken();
+    const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24); // 24hrs
 
-    res.status(201).json({ id_usuario: rows[0].id_usuario });
+    const insertSql = `
+      INSERT INTO "usuario"
+        (nome, email, senha, renda_fixa, gastos_fixos, meta_economia, email_verificado, token_verificacao, token_expires_at)
+      VALUES
+        ($1,   $2,    $3,    $4,         $5,          $6,            FALSE,            $7,                $8)
+      RETURNING id_usuario, email
+    `;
+    const insertValues = [
+      nome,
+      email,
+      senha_hash,
+      typeof toNum === 'function' ? toNum(renda_fixa)   : Number(renda_fixa || 0),
+      typeof toNum === 'function' ? toNum(gastos_fixos) : Number(gastos_fixos || 0),
+      typeof toNum === 'function' ? toNum(meta_economia): Number(meta_economia || 0),
+      token,
+      expiresAt,
+    ];
+
+    const { rows } = await client.query(insertSql, insertValues);
+    const user = rows[0];
+
+    const verifyUrl = `${process.env.APP_URL}/api/verify/${token}`;
+    await sendVerificationEmail(user.email, verifyUrl);
+
+    return res.status(201).json({
+      id_usuario: user.id_usuario,
+      message: 'Usuário criado. Enviamos um e-mail de verificação.',
+    });
+
   } catch (e) {
     if (e.code === '23505') {
       return res.status(409).json({ error: 'E-mail já cadastrado' });
     }
     console.error('POST /api/usuarios erro:', e);
-    res.status(500).json({ error: 'Erro ao criar o usuário' });
+    return res.status(500).json({ error: 'Erro ao criar o usuário' });
+  } finally {
+    client.release();
+  }
+});
+
+app.get('/api/verify/:token', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { token } = req.params;
+
+    const select = `
+      SELECT id_usuario, token_expires_at
+      FROM "usuario"
+      WHERE token_verificacao = $1 AND email_verificado = FALSE
+      LIMIT 1
+    `;
+    const { rows } = await client.query(select, [token]);
+    if (rows.length === 0) return res.status(400).send('Token inválido ou já utilizado.');
+
+    const { id_usuario, token_expires_at } = rows[0];
+    if (new Date(token_expires_at) < new Date()) {
+      return res.status(400).send('Token expirado. Solicite um novo e-mail de verificação.');
+    }
+
+    const update = `
+      UPDATE "usuario"
+      SET email_verificado = TRUE, token_verificacao = NULL, token_expires_at = NULL
+      WHERE id_usuario = $1
+    `;
+    await client.query(update, [id_usuario]);
+
+    const front = process.env.FRONT_URL;
+    return res.redirect(`${front}/?verified=1`);
+  } catch (e) {
+    console.error(e);
+    res.status(500).send('Erro ao verificar e-mail.');
+  } finally {
+    client.release();
+  }
+});
+
+function newVerificationToken() {
+  return crypto.randomBytes(32).toString('hex');
+}
+
+app.post('/api/usuarios/resend-verification', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const email = String(req.body?.email || '').trim().toLowerCase();
+    if (!email) return res.status(400).json({ error: 'email é obrigatório' });
+
+    const q = `
+      SELECT id_usuario, email, email_verificado
+      FROM usuario
+      WHERE lower(email) = $1
+      LIMIT 1
+    `;
+    const { rows } = await client.query(q, [email]);
+
+    const genericOk = { message: 'Se existir uma conta com este e-mail, enviaremos um novo link.' };
+
+    if (!rows.length) {
+      return res.json(genericOk);
+    }
+
+    const user = rows[0];
+    if (user.email_verificado) {
+      return res.json(genericOk);
+    }
+
+    const token = newVerificationToken();
+    const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24); // 24hrs
+
+    await client.query(
+      `UPDATE usuario
+         SET token_verificacao = $1, token_expires_at = $2
+       WHERE id_usuario = $3`,
+      [token, expiresAt, user.id_usuario]
+    );
+
+    const verifyUrl = `${process.env.APP_URL}/api/verify/${token}`;
+    await sendVerificationEmail(user.email, verifyUrl);
+
+    return res.json({ message: 'Novo e-mail de verificação enviado.' });
+  } catch (e) {
+    console.error('[RESEND VERIFY ERROR]', e);
+    return res.status(500).json({ error: 'Erro ao reenviar verificação' });
+  } finally {
+    client.release();
   }
 });
 
 app.post('/api/login', async (req, res) => {
   try {
-    const email = String(req.body?.email || '').trim();
+    const email = String(req.body?.email || '').trim().toLowerCase();
     const senha = String(req.body?.senha || '');
 
     if (!email || !senha) {
       return res.status(400).json({ error: 'email e senha são obrigatórios' });
     }
 
-    // pega o usuário
     const q = `
-      select id_usuario, nome, email, senha
-      from usuario
-      where lower(email) = lower($1)
-      limit 1
+      SELECT id_usuario, nome, email, senha, email_verificado
+      FROM "usuario"
+      WHERE lower(email) = $1
+      LIMIT 1
     `;
     const { rows } = await pool.query(q, [email]);
-    if (!rows.length) return res.status(401).json({ error: 'credenciais inválidas' });
+    if (!rows.length) {
+      return res.status(401).json({ error: 'credenciais inválidas' });
+    }
 
     const user = rows[0];
 
-    // compara hash da senha
-    const ok = await bcrypt.compare(senha, user.senha);
-    if (!ok) return res.status(401).json({ error: 'credenciais inválidas' });
+    if (!user.email_verificado) {
+      return res.status(403).json({
+        code: 'EMAIL_NOT_VERIFIED',
+        message: 'E-mail não verificado. Verifique seu e-mail ou solicite novo envio.'
+      });
+    }
 
-    // emite JWT
+    const ok = await bcrypt.compare(senha, user.senha);
+    if (!ok) {
+      return res.status(401).json({ error: 'credenciais inválidas' });
+    }
+
     const token = jwt.sign(
       { sub: user.id_usuario, nome: user.nome, email: user.email },
       JWT_SECRET,
@@ -111,7 +235,7 @@ app.post('/api/login', async (req, res) => {
       user: {
         id_usuario: user.id_usuario,
         nome: user.nome,
-        email: user.email,
+        email: user.email
       }
     });
   } catch (e) {
