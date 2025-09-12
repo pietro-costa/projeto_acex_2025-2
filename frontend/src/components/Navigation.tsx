@@ -12,7 +12,19 @@ export const Navigation = ({ currentView, setCurrentView }: NavigationProps) => 
       <div className="container mx-auto px-4">
         <div className="flex items-center justify-between h-16">
           <div className="flex items-center space-x-4">
-            <h1 className="text-xl font-bold text-white">📊 Finty</h1>
+            <button
+  type="button"
+  onClick={() => setCurrentView("dashboard")}
+  className="flex items-center focus:outline-none"
+  aria-label="Ir para o Painel"
+>
+  <img
+    src="fintyLogo-removebg-preview.png"          /* use /logo.svg se tiver SVG */
+    alt="Finty"
+    className="h-12 sm:h-13 md:h-14 w-auto select-none"
+    draggable="false"
+  />
+</button>
               {/* Mobile (hamburger) */}
 <div className="md:hidden">
   <Drawer>

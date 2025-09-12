@@ -13,8 +13,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { applyTheme, getStoredTheme, setStoredTheme, systemPrefersDark, type Theme } from "@/lib/theme";
-import { Switch } from "@/components/ui/switch";
 import { on } from "events";
 
 export const SettingsView = () => {
@@ -36,13 +34,6 @@ export const SettingsView = () => {
   const [totalGastos, setTotalGastos] = useState(0);
   const [economiaMes, setEconomiaMes] = useState<number>(0);
 
-  const [theme, setTheme] = useState<Theme>(() => getStoredTheme() ?? 'system');
-    useEffect(() => {
-    applyTheme(theme);
-    setStoredTheme(theme);
-  }, [theme])
-
-  const isDarkEffective = theme === 'dark' || (theme === 'system' && systemPrefersDark());
 
 
   function formatBRL(v: number | string) {
@@ -114,7 +105,7 @@ export const SettingsView = () => {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         
         {/* CARD 1: INFORMAÇÕES PESSOAIS */}
-        <Card className="bg-slate-800 border-slate-700">
+        <Card className="bg-slate-800 border-slate-700 lg:col-span-2">
           <CardHeader>
             <CardTitle className="text-white">👤 Informações Pessoais</CardTitle>
             <CardDescription className="text-slate-400">
@@ -163,44 +154,6 @@ export const SettingsView = () => {
           </CardContent>
         </Card>
 
-        {/* CARD 2: PREFERÊNCIAS DO APLICATIVO */}
-        <Card className="bg-slate-800 border-slate-700">
-          <CardHeader>
-            <CardTitle className="text-white">🎨 Preferências</CardTitle>
-            <CardDescription className="text-slate-400">
-              Personalize a aparência do aplicativo
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            
-            {/* Switch para trocar tema */}
-            <div className="flex items-center justify-between">
-              <div className="space-y-1">
-                <Label className="text-white">Tema Escuro</Label>
-                <p className="text-sm text-slate-400">
-                  Use o tema escuro para uma experiência mais confortável
-                </p>
-              </div>
-              <Switch
-                checked={isDarkEffective}
-                onCheckedChange={(on) => setTheme(on ? 'dark' : 'light')} // Troca entre claro e escuro
-                aria-label="Alternar tema escuro"
-              />
-            </div>
-
-            {/* Informação sobre o tema atual */}
-            <div className="p-3 bg-slate-700 rounded-lg">
-              <p className="text-sm text-white">
-                🌙 Tema atual: <span className="font-bold">
-                  {theme === 'system'
-                    ? (isDarkEffective ? 'Sistema (Escuro)' : 'Sistema (Claro)')
-                    : theme === 'dark' ? 'Escuro' : 'Claro'}
-                </span>
-              </p>
-            </div>
-
-          </CardContent>
-        </Card>
 
       </div>
 

@@ -22,7 +22,5 @@ export function applyTheme(theme: Theme) {
 }
 
 export function initTheme() {
-  // prioridade: o que o usuário escolheu → sistema
-  const stored = getStoredTheme();
-  applyTheme(stored ?? 'system');
+   document.documentElement.classList.add('dark');
 }
