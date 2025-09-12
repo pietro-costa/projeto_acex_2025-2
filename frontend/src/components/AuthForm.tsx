@@ -67,9 +67,10 @@ export const AuthForm = ({ onLogin }: AuthFormProps) => {
     <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
       <Card className="w-full max-w-md shadow-lg bg-slate-800 border-slate-700">
         <CardHeader className="text-center">
-          <CardTitle className="text-2xl font-bold text-white">
-            📊 Finty
-          </CardTitle>
+          <CardTitle className="flex justify-center py-1">
+          <img src="fintyLogo-removebg-preview.png" alt="Logo" className="w-36 sm:w-44 md:w-52 h-auto select-none" />
+          <span className="sr-only">Logo</span>
+   </CardTitle>
           <CardDescription className="text-slate-300">
             Comece sua jornada para uma melhor saúde financeira
           </CardDescription>

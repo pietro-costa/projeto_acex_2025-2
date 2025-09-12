@@ -423,31 +423,9 @@ const monthlyData: MonthlyPoint[] = useMemo(() => {
       </div>
 
       {/* Saldo + últimas despesas */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card className="bg-slate-800 border-slate-700">
-          <CardHeader>
-            <CardTitle className="text-white">Saldo Acumulado</CardTitle>
-            <CardDescription className="text-slate-400">Evolução diária</CardDescription>
-          </CardHeader>
-          <CardContent className="min-w-0">
-            <ChartContainer config={chartConfig} className="w-full aspect-[4/3] md:aspect-video">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={saldoSeries}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
-                  <XAxis dataKey="day" tick={{ fill: "#94a3b8" }} tickFormatter={fmtDia}/>
-                  <YAxis tick={{ fill: "#94a3b8" }} />
-                  <Tooltip
-                  labelFormatter={(v) => `Dia: ${fmtDia(String(v))}`}
-                  formatter={(value, name) => [fmtBRL(Number(value)), name]}
-                  />
-                  <Line type="monotone" dataKey="saldo" name="Saldo" stroke="#0f5a65ff" strokeWidth={2} dot={false} />
-                </LineChart>
-              </ResponsiveContainer>
-            </ChartContainer>
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
-        <Card className="bg-slate-800 border-slate-700">
+        <Card className="md:col-span-2 bg-slate-800 border border-slate-700 shadow-sm">
           <CardHeader>
             <CardTitle className="text-white">Últimas Despesas</CardTitle>
             <CardDescription className="text-slate-400">
