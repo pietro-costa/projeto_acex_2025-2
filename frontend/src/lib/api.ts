@@ -151,10 +151,10 @@ export type NewUsuario = {
   nome: string;
   email: string;
   senha: string;
+  confirm_senha?: string;
   renda_fixa: number | string;
   gastos_fixos: number | string;
   meta_economia?: number | string;
-  cpf?: string;
 };
 
 export const postUsuario = (u: NewUsuario) =>

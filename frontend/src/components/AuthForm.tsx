@@ -14,6 +14,7 @@ interface AuthFormProps {
 export const AuthForm = ({ onLogin }: AuthFormProps) => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [name, setName] = useState("");
   const [registrationStep, setRegistrationStep] = useState(1);
   const [activeTab, setActiveTab] = useState<'login' | 'register'>('login');
@@ -82,6 +83,7 @@ export const AuthForm = ({ onLogin }: AuthFormProps) => {
     if (!name.trim()) { alert('Informe seu nome.'); return; }
     if (!emailOk) { alert('Informe um e-mail válido.'); return; }
     if (!password || password.length < 6) { alert('A senha deve ter pelo menos 6 caracteres.'); return; }
+    if (password !== confirmPassword) { alert('As senhas não coincidem.'); return; }
     setRegistrationStep(2);
   };
 
@@ -94,7 +96,8 @@ export const AuthForm = ({ onLogin }: AuthFormProps) => {
         renda_fixa: Number(monthlyIncome || 0),
         gastos_fixos: Number(fixedExpenses || 0),
         meta_economia: Number(String(savingsGoal || 0).replace(',','.')),
-        senha: password || ""
+        senha: password || "",
+        confirm_senha: confirmPassword || ""
       };
       const res = await postUsuario(body as any);
       // Sucesso: volta para o login sem autenticar automaticamente
@@ -219,6 +222,18 @@ export const AuthForm = ({ onLogin }: AuthFormProps) => {
                         placeholder="Crie uma senha"
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
+                        required
+                        className="bg-slate-700 border-slate-600 text-white placeholder:text-slate-400"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="confirm-password" className="text-white">Confirmar senha</Label>
+                      <Input
+                        id="confirm-password"
+                        type="password"
+                        placeholder="Repita a senha"
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
                         required
                         className="bg-slate-700 border-slate-600 text-white placeholder:text-slate-400"
                       />

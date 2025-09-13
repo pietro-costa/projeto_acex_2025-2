@@ -52,10 +52,14 @@ app.get('/api/health', async (_req, res) => {
 app.post('/api/usuarios', async (req, res) => {
   const client = await pool.connect();
   try {
-    const { nome, email, senha, renda_fixa = 0, gastos_fixos = 0, meta_economia = 0 } = req.body;
+    const { nome, email, senha, confirm_senha, renda_fixa = 0, gastos_fixos = 0, meta_economia = 0 } = req.body;
 
     if (!nome || !email || !senha) {
       return res.status(400).json({ error: 'nome, email e senha são obrigatórios' });
+    }
+
+    if (typeof confirm_senha !== 'string' || senha !== confirm_senha) {
+      return res.status(400).json({ error: 'As senhas não coincidem.' });
     }
 
     const senha_hash = await bcrypt.hash(String(senha), 10);
