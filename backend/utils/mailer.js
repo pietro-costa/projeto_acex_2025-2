@@ -25,3 +25,21 @@ export async function sendVerificationEmail(to, verifyUrl) {
     html,
   });
 }
+
+export async function sendPasswordResetEmail(to, resetUrl) {
+  const html = `
+    <div style="font-family:Arial,sans-serif">
+      <h2>Redefinição de senha</h2>
+      <p>Clique no botão abaixo para redefinir sua senha. O link expira em ${process.env.RESET_TOKEN_TTL_MINUTES || 60} minutos.</p>
+      <p><a href="${resetUrl}" style="display:inline-block;padding:10px 16px;background:#111827;color:#fff;text-decoration:none;border-radius:8px">Redefinir senha</a></p>
+      <p>Ou copie e cole este link no navegador:<br>${resetUrl}</p>
+      <p style="color:#6b7280;font-size:12px">Se você não solicitou isso, ignore esta mensagem.</p>
+    </div>
+  `;
+  await mailer.sendMail({
+    from: `"Equipe Finty" <${process.env.GMAIL_USER}>`,
+    to,
+    subject: 'Redefinição de senha',
+    html,
+  });
+}

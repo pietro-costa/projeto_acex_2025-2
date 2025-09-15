@@ -5,7 +5,7 @@ import { pool } from './db/pool.js';
 import 'dotenv/config';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
-import { sendVerificationEmail } from './utils/mailer.js';
+import { sendVerificationEmail, sendPasswordResetEmail } from './utils/mailer.js';
 
 const JWT_SECRET = process.env.JWT_SECRET;
 const JWT_EXPIRES = process.env.JWT_EXPIRES;
@@ -33,7 +33,10 @@ function sameUserParam(paramName) {
 }
 
 const app = express();
-app.use(cors());
+app.use(cors({
+  origin: process.env.FRONT_URL,
+  credentials: true,
+}));
 app.use(express.json());
 
 const toNum = (v) =>
@@ -60,6 +63,10 @@ app.post('/api/usuarios', async (req, res) => {
 
     if (typeof confirm_senha !== 'string' || senha !== confirm_senha) {
       return res.status(400).json({ error: 'As senhas não coincidem.' });
+    }
+
+    if (String(senha).length < 6) {
+      return res.status(400).json({ error: 'A senha deve ter pelo menos 6 caracteres.' });
     }
 
     const senha_hash = await bcrypt.hash(String(senha), 10);
@@ -140,6 +147,27 @@ app.get('/api/verify/:token', async (req, res) => {
     res.status(500).send('Erro ao verificar e-mail.');
   } finally {
     client.release();
+  }
+});
+
+app.get('/api/password-reset/:token', async (req, res) => {
+  const { token } = req.params;
+  try {
+    const { rows } = await pool.query(
+      `select id_usuario
+         from "usuario"
+        where reset_token = $1
+          and reset_expires_at > NOW()
+        limit 1`,
+      [token]
+    );
+    if (!rows?.length) {
+      return res.redirect(`${process.env.FRONT_URL}/reset?status=invalid`);
+    }
+    return res.redirect(`${process.env.FRONT_URL}/reset?token=${encodeURIComponent(token)}`);
+  } catch (e) {
+    console.error('[PASSWORD RESET GET]', e);
+    return res.redirect(`${process.env.FRONT_URL}/reset?status=invalid`);
   }
 });
 
@@ -248,6 +276,84 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
+app.post('/api/forgot-password', async (req, res) => {
+  const { email } = req.body;
+
+  const okResponse = {
+    ok: true,
+    message: 'Se encontrarmos uma conta com este e-mail, enviaremos um link para redefinir a senha.'
+  };
+
+  if (!email || !String(email).includes('@')) {
+    return res.json(okResponse);
+  }
+
+  try {
+    const ttl = Number(process.env.RESET_TOKEN_TTL_MINUTES || 60); // minutos
+    const token = crypto.randomBytes(32).toString('hex');
+
+    // Atualiza token/expiração apenas se a conta existir
+    const { rowCount } = await pool.query(
+      `update "usuario"
+          set reset_token = $1,
+              reset_expires_at = NOW() + ($2 || ' minutes')::interval
+        where lower(email) = lower($3)`,
+      [token, ttl, email]
+    );
+
+    // Só envia o e-mail se alguma linha foi atualizada (conta existe)
+    if (rowCount > 0) {
+      const resetUrl = `${process.env.APP_URL}/api/password-reset/${token}`;
+      try {
+        await sendPasswordResetEmail(email, resetUrl);
+      } catch (err) {
+        console.error('[FORGOT PASSWORD][MAILER]', err.stack || err.message);
+      }
+    }
+
+    return res.json(okResponse);
+  } catch (e) {
+    console.error('[FORGOT PASSWORD]', e.stack || e.message);
+    return res.json(okResponse);
+  }
+});
+
+app.post('/api/password-reset', async (req, res) => {
+  const { token, senha, confirm_senha } = req.body;
+
+  if (!token || !senha || !confirm_senha) {
+    return res.status(400).json({ error: 'Dados incompletos.' });
+  }
+  if (senha !== confirm_senha) {
+    return res.status(400).json({ error: 'As senhas não conferem.' });
+  }
+  if (String(senha).length < 6) {
+    return res.status(400).json({ error: 'A senha deve ter pelo menos 6 caracteres.' });
+  }
+
+  try {
+    const hash = await bcrypt.hash(String(senha), 10);
+
+    const { rowCount } = await pool.query(
+      `update "usuario"
+          set senha = $1,
+              reset_token = null,
+              reset_expires_at = null
+        where reset_token = $2
+          and reset_expires_at > NOW()`,
+      [hash, token]
+    );
+
+    if (rowCount === 0) {
+      return res.status(400).json({ error: 'Token inválido ou expirado.' });
+    }
+    return res.json({ ok: true });
+  } catch (e) {
+    console.error('[PASSWORD RESET POST]', e);
+    return res.status(500).json({ error: 'Erro ao redefinir senha.' });
+  }
+});
+
 app.get('/api/usuarios/:id', auth, sameUserParam('id'), async (req, res) => {
   try {
     const { id } = req.params;
@@ -314,9 +420,6 @@ async function handleListCategorias(req, res) {
 }
 
 app.get('/api/categorias', handleListCategorias);
-
-// compativel com front antigo
-app.get('/api/categorias/:id_usuario', handleListCategorias);
 
 app.post('/api/transacoes', auth, async (req, res) => {
   try {
@@ -402,7 +505,7 @@ app.get('/api/transacoes/:id_usuario', auth, sameUserParam('id_usuario'), async 
   }
 });
 
-app.get('/api/analytics/sum-by-category/:id_usuario', async (req, res) => {
+app.get('/api/analytics/sum-by-category/:id_usuario', auth, sameUserParam('id_usuario'), async (req, res) => {
   try {
     const { id_usuario } = req.params;
     const { tipo } = req.query;
@@ -426,7 +529,7 @@ app.get('/api/analytics/sum-by-category/:id_usuario', async (req, res) => {
   }
 });
 
-app.get('/api/analytics/sum-by-day/:id_usuario', async (req, res) => {
+app.get('/api/analytics/sum-by-day/:id_usuario', auth, sameUserParam('id_usuario'), async (req, res) => {
   try {
     const id_usuario = Number(req.params.id_usuario);
     if (!Number.isFinite(id_usuario)) {
@@ -466,7 +569,7 @@ app.get('/api/analytics/sum-by-day/:id_usuario', async (req, res) => {
   }
 });
 
-app.get('/api/analytics/sum-by-month/:id_usuario', async (req, res) => {
+app.get('/api/analytics/sum-by-month/:id_usuario', auth, sameUserParam('id_usuario'), async (req, res) => {
   try {
     const id_usuario = Number(req.params.id_usuario);
     if (!Number.isFinite(id_usuario)) {
@@ -506,7 +609,7 @@ app.get('/api/analytics/sum-by-month/:id_usuario', async (req, res) => {
   }
 });
 
-app.get('/api/analytics/sum-by-year/:id_usuario', async (req, res) => {
+app.get('/api/analytics/sum-by-year/:id_usuario', auth, sameUserParam('id_usuario'), async (req, res) => {
   try {
     const id_usuario = Number(req.params.id_usuario);
     if (!Number.isFinite(id_usuario)) {
@@ -546,7 +649,7 @@ app.get('/api/analytics/sum-by-year/:id_usuario', async (req, res) => {
   }
 });
 
-app.get('/api/analytics/account-stats/:id_usuario', async (req, res) => {
+app.get('/api/analytics/account-stats/:id_usuario', auth, sameUserParam('id_usuario'), async (req, res) => {
   try {
     const id = Number(req.params.id_usuario);
     if (!Number.isFinite(id)) return res.status(400).json({ error: 'id_usuario inválido' });

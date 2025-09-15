@@ -36,3 +36,18 @@ insert into categoria (nome_categoria, tipo) values
 ('Transporte','despesa'),
 ('Outros','despesa')
 on conflict do nothing;
+
+alter table if exists usuario
+  add column if not exists email_verificado boolean not null default false,
+  add column if not exists token_verificacao text,
+  add column if not exists token_expires_at timestamptz;
+
+create index if not exists idx_usuario_token_verificacao
+  on usuario(token_verificacao);
+
+alter table if exists usuario
+  add column if not exists reset_token text,
+  add column if not exists reset_expires_at timestamptz;
+
+create index if not exists idx_usuario_reset_token
+  on usuario(reset_token);
