@@ -48,39 +48,32 @@ export const AuthForm = ({ onLogin }: AuthFormProps) => {
     }
   }, []);
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleLogin = async (e?: React.FormEvent<HTMLFormElement>) => {
+    e?.preventDefault?.();
     
     if (loggingIn) return;
     setLoggingIn(true);
 
     try {
-      const { token, user } = await postLogin(email.trim(), password);
+      const { token, user } = await postLogin({email: email.trim(), senha: password});
       localStorage.setItem("token", token);
       localStorage.setItem("id_usuario", String(user.id_usuario));
-      onLogin();
+      onLogin?.();
     } catch (err: any) {
-      if (err?.code === "EMAIL_NOT_VERIFIED" || err?.message === "EMAIL_NOT_VERIFIED") {
+      if (err?.code === "EMAIL_NOT_VERIFIED") {
         setShowResend(true);
         toast({
           title: "E-mail não verificado",
-          description: "Confirme o e-mail que enviamos. Se não recebeu, você pode solicitar um novo envio abaixo.",
-        });
-        return;
-      }
-      if (err?.message === "AUTH_EXPIRED") {
-        toast({
-          title: "Sessão expirada",
-          description: "Faça login novamente.",
+          description: "Confirme o e-mail que enviamos. Se não recebeu, solicite um novo envio abaixo.",
           variant: "destructive",
         });
-        return;
+      } else {
+        toast({
+          title: "Falha ao entrar",
+          description: "E-mail ou senha incorretos.",
+          variant: "destructive",
+        });
       }
-      toast({
-        title: "Falha ao entrar",
-        description: err?.message || "E-mail ou senha incorretos",
-        variant: "destructive",
-      });
     } finally {
       setLoggingIn(false);
     }

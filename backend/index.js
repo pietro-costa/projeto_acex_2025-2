@@ -33,8 +33,9 @@ function sameUserParam(paramName) {
 }
 
 const app = express();
+const allowed = [process.env.FRONT_URL].filter(Boolean);
 app.use(cors({
-  origin: process.env.FRONT_URL,
+  origin: allowed,
   credentials: true,
 }));
 app.use(express.json());
@@ -239,7 +240,7 @@ app.post('/api/login', async (req, res) => {
     `;
     const { rows } = await pool.query(q, [email]);
     if (!rows.length) {
-      return res.status(401).json({ error: 'credenciais inválidas' });
+      return res.status(401).json({ error: "INVALID_CREDENTIALS", message: "E-mail ou senha incorretos." });
     }
 
     const user = rows[0];

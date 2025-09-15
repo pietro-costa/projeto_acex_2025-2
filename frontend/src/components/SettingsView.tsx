@@ -13,6 +13,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { toast } from "@/components/ui/use-toast";
 import { on } from "events";
 
 export const SettingsView = () => {
@@ -89,9 +90,14 @@ export const SettingsView = () => {
       setTotalGastos(stats?.total_gastos ?? 0);
       setEconomiaMes(Number(stats?.economia_mes ?? 0));
 
-      alert("Configurações salvas!");
+      toast({
+        title: "Configurações salvas com sucesso"});
     } catch (e: any) {
-      alert("Erro ao salvar: " + (e?.message || "erro desconhecido"));
+      toast({
+        title: "Erro ao salvar",
+        description: e?.message || "Erro desconhecido.",
+        variant: "destructive",
+      })
     } finally {
       setSaving(false);
     }

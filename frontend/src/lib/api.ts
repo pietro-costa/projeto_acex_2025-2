@@ -1,49 +1,42 @@
-const BASE = import.meta.env.VITE_API_URL;
+const rawBase =
+  (import.meta.env as any).VITE_API_URL;
+const BASE = rawBase.replace(/\/+$/, "");
 
-const getToken = () => {
-  try { return localStorage.getItem("token"); } catch { return null; }
-};
-
-async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const token = getToken();
-  const res = await fetch(`${BASE}${path}`, {
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    ...init,
-  });
-
-  if (!res.ok) {
-    let data: any = null;
-    try {
-      data = await res.json();
-    } catch {
-    }
-
-    if (res.status === 403 && data?.code === "EMAIL_NOT_VERIFIED") {
-      const err: any = new Error("EMAIL_NOT_VERIFIED");
-      err.code = "EMAIL_NOT_VERIFIED";
-      err.payload = data;
-      throw err;
-    }
-
-    if (res.status === 401 || res.status === 403) {
-      try {
-        localStorage.removeItem("token");
-        localStorage.removeItem("id_usuario");
-      } catch {}
-      if (typeof window !== "undefined" && !location.pathname.includes("login")) {
-        location.href = "/login";
-      }
-      throw new Error("Sessão expirada. Faça login novamente.");
-    }
-
-    const msg = data?.error || data?.message || (await res.text().catch(() => res.statusText));
-    throw new Error(msg || res.statusText);
+class ApiError extends Error {
+  code?: string;
+  status?: number;
+  constructor(message: string, code?: string, status?: number) {
+    super(message);
+    this.name = "ApiError";
+    this.code = code;
+    this.status = status;
   }
+}
 
-  return res.json() as Promise<T>;
+async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const url = `${BASE}${path.startsWith("/") ? path : `/${path}`}`;
+  const token = localStorage.getItem("token") ?? undefined;
+
+  // normaliza os headers do init para objeto simples
+  const initHeaders: Record<string, string> =
+    init.headers instanceof Headers
+      ? Object.fromEntries(init.headers.entries())
+      : (init.headers as Record<string, string> | undefined) ?? {};
+
+  // monta headers finais tipados (sem erro de TS)
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...initHeaders,
+  };
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const res = await fetch(url, { ...init, headers });
+
+  const data: any = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data?.error || data?.message || "Falha na requisição");
+  }
+  return data as T;
 }
 
 export type Categoria = {
@@ -165,11 +158,12 @@ export const postUsuario = (u: NewUsuario) =>
 
 export const getUsuario = (id: number) => api<Usuario>(`/api/usuarios/${id}`);
 
-export const postLogin = (email: string, senha: string) =>
-  api<{ token: string; user: { id_usuario: number; nome: string; email: string } }>(
-    `/api/login`,
-    { method: "POST", body: JSON.stringify({ email, senha }) }
-  );
+export function postLogin(body: { email: string; senha: string }) {
+  return api<{ token: string; user: any }>('/api/login', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
 
 export const patchUsuario = (
   id: number,
