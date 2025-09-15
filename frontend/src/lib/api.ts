@@ -187,4 +187,19 @@ export async function resendVerificationByEmail(email: string) {
   });
 }
 
+// === ESQUECI MINHA SENHA ===
+export function forgotPassword(email: string) {
+  return api<{ ok: boolean; message?: string }>('/api/forgot-password', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  });
+}
+
+export function resetPassword(token: string, senha: string, confirm_senha: string) {
+  return api<{ ok: boolean }>('/api/password-reset', {
+    method: 'POST',
+    body: JSON.stringify({ token, senha, confirm_senha }),
+  });
+}
+
 export { api };
