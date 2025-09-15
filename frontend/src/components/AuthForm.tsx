@@ -26,6 +26,7 @@ export const AuthForm = ({ onLogin }: AuthFormProps) => {
   const [resending, setResending] = useState(false);
   const [sending, setSending] = useState(false);
   const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [loggingIn, setLoggingIn] = useState(false);
 
   useEffect(() => {
     const url = new URL(window.location.href);
@@ -49,6 +50,10 @@ export const AuthForm = ({ onLogin }: AuthFormProps) => {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (loggingIn) return;
+    setLoggingIn(true);
+
     try {
       const { token, user } = await postLogin(email.trim(), password);
       localStorage.setItem("token", token);
@@ -76,6 +81,8 @@ export const AuthForm = ({ onLogin }: AuthFormProps) => {
         description: err?.message || "E-mail ou senha incorretos",
         variant: "destructive",
       });
+    } finally {
+      setLoggingIn(false);
     }
   };
 
@@ -217,6 +224,7 @@ export const AuthForm = ({ onLogin }: AuthFormProps) => {
                     onChange={(e) => setEmail(e.target.value)}
                     required
                     className="bg-slate-700 border-slate-600 text-white placeholder:text-slate-400"
+                    disabled={loggingIn}
                   />
                 </div>
                 <div className="space-y-2">
@@ -229,11 +237,16 @@ export const AuthForm = ({ onLogin }: AuthFormProps) => {
                     onChange={(e) => setPassword(e.target.value)}
                     required
                     className="bg-slate-700 border-slate-600 text-white placeholder:text-slate-400"
+                    disabled={loggingIn}
                   />
                 </div>
 
-                <Button type="submit" className="w-full bg-slate-700 hover:bg-slate-600 text-white">
-                  Entrar
+                <Button type="submit" 
+                  className="w-full bg-yellow-500 hover:bg-yellow-400 text-black disabled:opacity-70 disabled:cursor-not-allowed focus-visible:ring-yellow-500"
+                  disabled={loggingIn}
+                  aria-busy={loggingIn}
+                >
+                  {loggingIn ? "Entrando..." : "Entrar"} 
                 </Button>
                 <div className="mt-2 text-right">
                   <button
