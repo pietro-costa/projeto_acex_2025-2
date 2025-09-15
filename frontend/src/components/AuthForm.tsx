@@ -52,12 +52,20 @@ export const AuthForm = ({ onLogin }: AuthFormProps) => {
         return;
       }
       if (err?.message === "AUTH_EXPIRED") {
-        alert("Falha ao entrar: Sessão expirada. Faça login novamente.");
-      return;
+        toast({
+          title: "Sessão expirada",
+          description: "Faça login novamente.",
+          variant: "destructive",
+        });
+        return;
+      }
+      toast({
+        title: "Falha ao entrar",
+        description: err?.message || "E-mail ou senha incorretos",
+        variant: "destructive",
+      });
     }
-    alert("Falha ao entrar: " + (err?.message || "E-mail ou senha incorretos"));
-  }
-};
+  };
 
   const handleResend = async () => {
     try {
@@ -71,6 +79,7 @@ export const AuthForm = ({ onLogin }: AuthFormProps) => {
       toast({
         title: "Não foi possível reenviar",
         description: e?.message || "Tente novamente em instantes.",
+        variant: "destructive",
       });
     } finally {
       setResending(false);
@@ -80,10 +89,24 @@ export const AuthForm = ({ onLogin }: AuthFormProps) => {
   const handleRegisterStep1 = (e: React.FormEvent) => {
     e.preventDefault();
     const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
-    if (!name.trim()) { alert('Informe seu nome.'); return; }
-    if (!emailOk) { alert('Informe um e-mail válido.'); return; }
-    if (!password || password.length < 6) { alert('A senha deve ter pelo menos 6 caracteres.'); return; }
-    if (password !== confirmPassword) { alert('As senhas não coincidem.'); return; }
+
+    if (!name.trim()) {
+      toast({ title: "Nome obrigatório", description: "Informe seu nome completo.", variant: "destructive" });
+      return;
+    }
+    if (!emailOk) {
+      toast({ title: "E-mail inválido", description: "Informe um e-mail válido.", variant: "destructive" });
+      return;
+    }
+    if (!password || password.length < 6) {
+      toast({ title: "Senha fraca", description: "A senha deve ter pelo menos 6 caracteres.", variant: "destructive" });
+      return;
+    }
+    if (password !== confirmPassword) {
+      toast({ title: "Senhas diferentes", description: "As senhas não coincidem.", variant: "destructive" });
+      return;
+    }
+
     setRegistrationStep(2);
   };
 
@@ -99,16 +122,22 @@ export const AuthForm = ({ onLogin }: AuthFormProps) => {
         senha: password || "",
         confirm_senha: confirmPassword || ""
       };
-      const res = await postUsuario(body as any);
-      // Sucesso: volta para o login sem autenticar automaticamente
+      await postUsuario(body as any);
+
       setRegistrationStep(1);
       setActiveTab('login');
       setPassword('');
-      toast({ title: 'Conta criada!', description: 'Enviamos um e-mail de verificação. Confirme para fazer login.' });
-      
+      toast({
+        title: "Conta criada!",
+        description: "Enviamos um e-mail de verificação. Confirme para fazer login.",
+      });
     } catch (err:any) {
       console.error(err);
-      alert('Falha ao cadastrar usuário: ' + (err?.message || 'erro desconhecido'));
+      toast({
+        title: "Falha ao cadastrar usuário",
+        description: err?.message || "Erro desconhecido",
+        variant: "destructive",
+      });
     }
   };
 
@@ -121,9 +150,9 @@ export const AuthForm = ({ onLogin }: AuthFormProps) => {
       <Card className="w-full max-w-md shadow-lg bg-slate-800 border-slate-700">
         <CardHeader className="text-center">
           <CardTitle className="flex justify-center py-1">
-          <img src="fintyLogo-removebg-preview.png" alt="Logo" className="w-36 sm:w-44 md:w-52 h-auto select-none" />
-          <span className="sr-only">Logo</span>
-   </CardTitle>
+            <img src="fintyLogo-removebg-preview.png" alt="Logo" className="w-36 sm:w-44 md:w-52 h-auto select-none" />
+            <span className="sr-only">Logo</span>
+          </CardTitle>
           <CardDescription className="text-slate-300">
             Comece sua jornada para uma melhor saúde financeira
           </CardDescription>
@@ -135,6 +164,7 @@ export const AuthForm = ({ onLogin }: AuthFormProps) => {
               <TabsTrigger value="register" className="text-white data-[state=active]:bg-yellow-500 data-[state=active]:text-slate-900">Registrar</TabsTrigger>
             </TabsList>
 
+            {/* LOGIN */}
             <TabsContent value="login">
               <form onSubmit={handleLogin} className="space-y-4">
                 <div className="space-y-2">
@@ -161,6 +191,7 @@ export const AuthForm = ({ onLogin }: AuthFormProps) => {
                     className="bg-slate-700 border-slate-600 text-white placeholder:text-slate-400"
                   />
                 </div>
+
                 <Button type="submit" className="w-full bg-slate-700 hover:bg-slate-600 text-white">
                   Entrar
                 </Button>
@@ -173,9 +204,9 @@ export const AuthForm = ({ onLogin }: AuthFormProps) => {
                   </p>
                   <Button
                     type="button"
-                      onClick={handleResend}
-                      disabled={resending || !email.trim()}
-                      className="bg-yellow-500 hover:bg-yellow-600 text-slate-900 font-semibold"
+                    onClick={handleResend}
+                    disabled={resending || !email.trim()}
+                    className="bg-yellow-500 hover:bg-yellow-600 text-slate-900 font-semibold"
                   >
                     {resending ? "Enviando..." : "Reenviar verificação"}
                   </Button>
@@ -183,66 +214,74 @@ export const AuthForm = ({ onLogin }: AuthFormProps) => {
               )}
             </TabsContent>
 
+            {/* REGISTRO */}
             <TabsContent value="register">
               {registrationStep === 1 ? (
-                <div>
-                  <div className="mb-4 text-center">
-                    <p className="text-sm text-slate-400">Etapa 1 de 2 - Informações Pessoais</p>
-                  </div>
-                  <form onSubmit={handleRegisterStep1} className="space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="name" className="text-white">Nome Completo</Label>
-                      <Input
-                        id="name"
-                        type="text"
-                        placeholder="Digite seu nome completo"
-                        value={name}
-                        onChange={(e) => setName(e.target.value)}
-                        required
-                        className="bg-slate-700 border-slate-600 text-white placeholder:text-slate-400"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="email" className="text-white">E-mail</Label>
-                      <Input
-                        id="email"
-                        type="email"
-                        placeholder="Digite seu e-mail"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        required
-                        className="bg-slate-700 border-slate-600 text-white placeholder:text-slate-400"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="password" className="text-white">Senha</Label>
-                      <Input
-                        id="password"
-                        type="password"
-                        placeholder="Crie uma senha"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        required
-                        className="bg-slate-700 border-slate-600 text-white placeholder:text-slate-400"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="confirm-password" className="text-white">Confirmar senha</Label>
-                      <Input
-                        id="confirm-password"
-                        type="password"
-                        placeholder="Repita a senha"
-                        value={confirmPassword}
-                        onChange={(e) => setConfirmPassword(e.target.value)}
-                        required
-                        className="bg-slate-700 border-slate-600 text-white placeholder:text-slate-400"
-                      />
-                    </div>
-                    <Button type="submit" className="w-full bg-yellow-500 hover:bg-yellow-600 text-slate-900 font-semibold">
-                      Continuar
-                    </Button>
-                  </form>
-                </div>
+  <div>
+    <div className="mb-4 text-center">
+      <p className="text-sm text-slate-400">Etapa 1 de 2 - Informações Pessoais</p>
+    </div>
+    <form onSubmit={handleRegisterStep1} className="space-y-4">
+      <div className="space-y-2">
+        <Label htmlFor="name" className="text-white">Nome Completo</Label>
+        <Input
+          id="name"
+          type="text"
+          placeholder="Digite seu nome completo"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          required
+          className="bg-slate-700 border-slate-600 text-white placeholder:text-slate-400"
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="email" className="text-white">E-mail</Label>
+        <Input
+          id="email"
+          type="email"
+          placeholder="Digite seu e-mail"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          required
+          className="bg-slate-700 border-slate-600 text-white placeholder:text-slate-400"
+        />
+      </div>
+
+      {/* <= AQUI ESTÁ O AJUSTE: no desktop (md+) ficam lado a lado */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="password" className="text-white">Senha</Label>
+          <Input
+            id="password"
+            type="password"
+            placeholder="Crie uma senha"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            className="bg-slate-700 border-slate-600 text-white placeholder:text-slate-400"
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="confirm-password" className="text-white">Confirmar senha</Label>
+          <Input
+            id="confirm-password"
+            type="password"
+            placeholder="Repita a senha"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            required
+            className="bg-slate-700 border-slate-600 text-white placeholder:text-slate-400"
+          />
+        </div>
+      </div>
+
+      <Button type="submit" className="w-full bg-yellow-500 hover:bg-yellow-600 text-slate-900 font-semibold">
+        Continuar
+      </Button>
+    </form>
+  </div>
               ) : (
                 <div>
                   <div className="mb-4 text-center">
@@ -289,6 +328,34 @@ export const AuthForm = ({ onLogin }: AuthFormProps) => {
                         onChange={(e) => setSavingsGoal(e.target.value)}
                         className="bg-slate-700 border-slate-600 text-white placeholder:text-slate-400"
                       />
+                    </div>
+
+                    {/* Checkbox LGPD - Registro (etapa final) */}
+                    <div className="flex items-start gap-2">
+                      <input
+                        id="agree-register"
+                        type="checkbox"
+                        required
+                        className="mt-1 h-4 w-4 rounded border-slate-600 bg-slate-700 text-yellow-500 focus:ring-2 focus:ring-yellow-500 focus:ring-offset-0"
+                      />
+                      <Label htmlFor="agree-register" className="text-slate-300 text-sm leading-relaxed">
+                        Li e concordo com os{" "}
+                        <a 
+                        href="https://www.planalto.gov.br/ccivil_03/_ato2015-2018/2018/lei/l13709.htm" 
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        className="underline hover:opacity-90">
+                          Termos de Uso
+                        </a>{" "}
+                        e a{" "}
+                        <a 
+                        href="https://www.planalto.gov.br/ccivil_03/_ato2015-2018/2018/lei/l13709.htm"
+                        target="_blank"
+                        rel="noopener noreferrer" 
+                        className="underline hover:opacity-90">
+                          Política de Privacidade
+                        </a>.{" "}
+                      </Label>
                     </div>
 
                     <div className="flex gap-2">

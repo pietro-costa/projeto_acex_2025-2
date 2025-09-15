@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Card,
   CardContent,
@@ -13,7 +13,6 @@ import {
   XAxis,
   YAxis,
   CartesianGrid,
-  ResponsiveContainer,
   PieChart,
   Pie,
   Cell,
@@ -60,6 +59,202 @@ export const DashboardView = () => {
   const [usuario, setUsuario] = useState<Usuario | null>(null);
   const [transacoes, setTransacoes] = useState<Transacao[]>([]);
   const [categoriasDict, setCategoriasDict] = useState<Record<number, string>>({});
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [chartW, setChartW] = useState(0);
+  const [chartH, setChartH] = useState(0);
+  const [isMobile, setIsMobile] = useState(false);
+  const [vw, setVw] = useState(0);
+  const isDesktop = vw >= 1024; 
+  const isTablet  = vw >= 768 && vw < 1024;
+
+useEffect(() => {
+  const compute = () =>
+    typeof window !== "undefined" &&
+    (window.matchMedia("(pointer: coarse)").matches || window.innerWidth < 768);
+
+  const onResize = () => {
+    setIsMobile(compute());
+    if (typeof window !== "undefined") setVw(window.innerWidth); 
+  };
+
+  // inicial
+  setIsMobile(compute());
+  if (typeof window !== "undefined") setVw(window.innerWidth);
+
+  window.addEventListener("resize", onResize);
+  return () => window.removeEventListener("resize", onResize);
+}, []);
+  const [activeMonthIdx, setActiveMonthIdx] = useState<number | null>(null);
+  const activateBar = (payload: any, i?: number) => {
+    const idx =
+      typeof i === "number"
+      ? i
+      : typeof payload === "number"
+      ? payload
+      : typeof payload?.index === "number"
+      ? payload.index
+      : null;
+  if (idx !== null) setActiveMonthIdx(idx);
+};
+  const deactivateBar = () => setActiveMonthIdx(null);
+  const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  const activate = (payload: any, i?: number) => {
+    const idx =
+      typeof i === "number" ? i :
+      typeof payload === "number" ? payload :
+      typeof payload?.index === "number" ? payload.index : null;
+    if (idx !== null) setActiveIndex(idx);
+  };
+  const deactivate = () => setActiveIndex(null);
+
+useEffect(() => {
+  if (!containerRef.current) return;
+  const ro = new ResizeObserver((entries) => {
+    const r = entries[0]?.contentRect;
+    if (r?.width) setChartW(r.width);
+    if (r?.height) setChartH(r.height);
+  });
+  ro.observe(containerRef.current);
+  return () => ro.disconnect();
+}, []);
+
+ // mantém os trackers acima desta função:
+let lastYLeft  = Number.NaN;
+let lastYRight = Number.NaN;
+
+const renderSmartLabel = (props: any) => {
+  const RAD = Math.PI / 180;
+  const {
+    cx, cy, midAngle, outerRadius, name, category, value, amount, index,
+  } = props;
+
+  // reinicia os rastreadores no 1º setor
+  if (index === 0) {
+    lastYLeft = Number.NaN;
+    lastYRight = Number.NaN;
+  }
+
+  // --- helpers de responsividade ---
+  const veryNarrow = chartW <= 360;       // Galaxy S8/S9 etc.
+  const narrow     = chartW < 340;
+
+  // encurta o texto em telas estreitas (tooltip mantém o nome completo)
+  const fullText = String(name ?? category ?? "");
+  const shortText =
+    veryNarrow && fullText.length > 12
+      ? fullText.slice(0, 11) + "…"
+      : narrow && fullText.length > 14
+      ? fullText.slice(0, 13) + "…"
+      : fullText;
+
+  const moneyText = fmtBRL(Number(value ?? amount ?? 0));
+  const color = pieColors[index % pieColors.length];
+
+  const or = outerRadius ?? 0;
+  const elbow1 = 14;
+  const elbow2 = veryNarrow ? 20 : (chartW < 360 ? 22 : 22); // braço ligeiramente menor no super-estreito
+  const r = or + elbow1 + elbow2;
+
+  const baseX = cx + Math.cos(-RAD * midAngle) * r;
+  const baseY = cy + Math.sin(-RAD * midAngle) * r;
+
+  const padX = veryNarrow ? 12 : 10;
+  const padY = 10;
+  const edgeLeft   = padX;
+  const edgeRight  = chartW ? chartW - padX : Infinity;
+  const edgeTop    = padY;
+  const edgeBottom = chartH ? chartH - padY : Infinity;
+
+  // posição inicial + clamp horizontal
+  let x = chartW ? Math.max(edgeLeft, Math.min(baseX, edgeRight)) : baseX;
+  let y = baseY;
+
+  // lado + âncora
+  let onRight = x > cx;
+  let anchor: "start" | "end" = onRight ? "start" : "end";
+
+  // se encostar na borda, ancora para dentro
+  const flipThresh = veryNarrow ? 40 : 28;
+  if (chartW && x > edgeRight - 8) { x = edgeRight - 2; anchor = "end"; onRight = true; }
+  if (chartW && x < edgeLeft  + 8) { x = edgeLeft  + 2; anchor = "start"; onRight = false; }
+
+  // pontos da linha
+  const sx = cx + Math.cos(-RAD * midAngle) * or;
+  const sy = cy + Math.sin(-RAD * midAngle) * or;
+  const mx = cx + Math.cos(-RAD * midAngle) * (or + elbow1);
+  const my = cy + Math.sin(-RAD * midAngle) * (or + elbow1);
+  const hx = cx + Math.cos(-RAD * midAngle) * (or + elbow1 + elbow2);
+  const hy = cy + Math.sin(-RAD * midAngle) * (or + elbow1 + elbow2);
+
+  // afasta da quina + re-clamp horizontal
+  x += anchor === "start" ? 6 : -6;
+  x  = chartW ? Math.max(edgeLeft, Math.min(x, edgeRight)) : x;
+
+  // anti-colisão por lado
+  const MIN_GAP = veryNarrow ? 12 : (narrow ? 14 : 16);
+  y += (index % 2 === 0 ? -6 : 6);
+  if (onRight) {
+    if (!Number.isFinite(lastYRight)) lastYRight = y;
+    else if (Math.abs(y - lastYRight) < MIN_GAP)
+      y = lastYRight + (y >= lastYRight ? 1 : -1) * MIN_GAP;
+    lastYRight = y;
+  } else {
+    if (!Number.isFinite(lastYLeft)) lastYLeft = y;
+    else if (Math.abs(y - lastYLeft) < MIN_GAP)
+      y = lastYLeft + (y >= lastYLeft ? 1 : -1) * MIN_GAP;
+    lastYLeft = y;
+  }
+
+  // clamp vertical (considera bloco de 2 linhas)
+  const fontPx = veryNarrow ? 9 : (narrow ? 10 : 12);
+  const charW  = fontPx * 0.62;
+  const estW   = Math.min(shortText.length * charW, 140);
+  const blockHalf = fontPx; // aprox. duas linhas
+  if (chartH) {
+    const topSafe = edgeTop + blockHalf;
+    const bottomSafe = edgeBottom - blockHalf;
+    y = Math.max(topSafe, Math.min(y, bottomSafe));
+  }
+if (chartW) {
+  if (anchor === "start" && x + estW > edgeRight - 2) {
+    // vira para dentro
+    anchor = "end";
+    x = Math.max(edgeLeft + 2, edgeRight - 2);        // referencia no limite
+  } else if (anchor === "end" && x - estW < edgeLeft + 2) {
+    anchor = "start";
+    x = Math.min(edgeRight - 2, edgeLeft + 2);
+  }
+}
+  const labelClass =
+    veryNarrow ? "text-[9px]"
+    : narrow    ? "text-[10px]"
+                : "text-xs";
+
+  return (
+    <g pointerEvents="none">
+      <path
+        d={`M ${sx},${sy} L ${mx},${my} L ${hx},${hy} L ${x},${y}`}
+        fill="none"
+        stroke={color}
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        opacity={0.95}
+      />
+      <text
+        x={x}
+        y={y}
+        textAnchor={anchor}
+        dominantBaseline="central"
+        className={labelClass}
+        fill={color}
+      >
+        <tspan x={x} dy="-0.6em">{shortText}</tspan>
+        <tspan x={x} dy="1.2em">{moneyText}</tspan>
+      </text>
+    </g>
+  );
+};
 
   const idUsuario = getUserId();
   const nowMonth = new Date().toISOString().slice(0, 7); // YYYY-MM
@@ -369,27 +564,49 @@ const monthlyData: MonthlyPoint[] = useMemo(() => {
             </CardDescription>
           </CardHeader>
           <CardContent className="min-w-0">
-            <ChartContainer config={chartConfig} className="w-full aspect-[4/3] md:aspect-video">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
+            <ChartContainer ref={containerRef} config={chartConfig} className="w-full aspect-[4/3] lg:aspect-video">
+                <PieChart margin={{ top: 8, right: 12, bottom: 8, left: 12 }}>
                   <Pie
                     cx="50%"
                     cy="50%"
-                    outerRadius={80}
+                    outerRadius={(() => {
+                     const base = Math.floor(chartW / (isDesktop ? 5 : isTablet ? 3.6 : 5));
+                     const maxR = isDesktop ? 84 : isTablet ? 128 : 84; 
+                     return Math.max(56, Math.min(maxR, base));
+                      })()}
                     data={categoryData}
                     dataKey="amount"
                     nameKey="category"
-                    label={({ category, amount }) => `${category}: ${fmtBRL(amount)}`}
+                    label={renderSmartLabel}
+                    labelLine={false}
+                    activeIndex={activeIndex ?? undefined}
+                    isAnimationActive={false}
+                    onMouseEnter={activate}
+                    onMouseLeave={deactivate}
+                    onClick={activate}
+                    onTouchStart={activate}
+                    onTouchEnd={deactivate}
+                    onPointerDown={activate}
+                    onPointerLeave={deactivate}
                   >
                     {categoryData.map((_, i) => (
-                      <Cell key={`cell-${i}`} fill={pieColors[i % pieColors.length]} />
+                      <Cell 
+                      key={i} 
+                      fill={pieColors[i % pieColors.length]} 
+                      onMouseEnter={() => setActiveIndex(i)} 
+                      onMouseLeave={deactivate}
+                      onClick={() => setActiveIndex(i)}
+                      onTouchStart={() => setActiveIndex(i)}
+                      onTouchEnd={deactivate}
+                      />
                     ))}
                   </Pie>
                   <Tooltip
-                    formatter={(value: any, name) => [fmtBRL(Number(value)), String(name)]}
+                    formatter={(v: any, n) => [fmtBRL(Number(v)), String(n)]}
+                    cursor={{ fill: "transparent" }}
+                    wrapperStyle={{ pointerEvents: "none" }}
                   />
                 </PieChart>
-              </ResponsiveContainer>
             </ChartContainer>
           </CardContent>
         </Card>
@@ -402,23 +619,90 @@ const monthlyData: MonthlyPoint[] = useMemo(() => {
               Renda vs Gastos (últimos 6 meses)
             </CardDescription>
           </CardHeader>
-          <CardContent className="min-w-0"> 
-            <ChartContainer config={chartConfig} className="w-full aspect-[4/3] md:aspect-video">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={monthlyData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
-                  <XAxis dataKey="month" tick={{ fill: "#94a3b8" }} tickFormatter={fmtMes} />
-                  <YAxis tick={{ fill: "#94a3b8" }} />
-                  <Tooltip 
-                  labelFormatter={(v) => `Mês: ${fmtMes(String(v))}`}
-                  formatter={(value, name) => [fmtBRL(Number(value)), name]}
-                  />
-                  <Bar dataKey="income" name="Renda" fill="#10b981" radius={4} />
-                  <Bar dataKey="expenses" name="Gastos" fill="#ef4444" radius={4}/>
-                </BarChart>
-              </ResponsiveContainer>
-            </ChartContainer>
-          </CardContent>
+         <CardContent className="min-w-0" onClick={() => setActiveMonthIdx(null)} >
+        <div onClick={(e) => e.stopPropagation()}>
+        <ChartContainer config={chartConfig} className="w-full aspect-[4/3] md:aspect-video">
+          <BarChart
+            data={monthlyData}
+            margin={{ top: 8, right: 12, bottom: isMobile ? 16 : 8, left: 12 }}
+            barCategoryGap={isMobile ? "45%" : "25%"}
+            barGap={isMobile ? 16 : 14}
+         >
+      <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
+      <XAxis
+        dataKey="month"
+        tick={{ fill: "#94a3b8" }}
+        tickFormatter={fmtMes}
+        angle={isMobile ? -30 : 0}
+        dx={isMobile ? -6 : 0}
+        dy={isMobile ? 10 : 0}
+        height={isMobile ? 40 : undefined}
+        interval={0}
+      />
+      <YAxis tick={{ fill: "#94a3b8" }} />
+      <Tooltip
+        active={activeMonthIdx !== null}
+        label={activeMonthIdx !== null ? monthlyData[activeMonthIdx].month : undefined}
+        payload={
+          activeMonthIdx !== null
+          ? [
+              { name: "Renda",  value: monthlyData[activeMonthIdx].income,   color: "#10b981" },
+              { name: "Gastos", value: monthlyData[activeMonthIdx].expenses, color: "#ef4444" },
+            ]
+             : undefined
+            }
+        labelFormatter={(v) => `Mês: ${fmtMes(String(v))}`}
+        formatter={(value, name) => [fmtBRL(Number(value)), name]}
+        wrapperStyle={{ pointerEvents: "none" }}
+        cursor={{ fill: "transparent" }}
+      />
+
+      {/* Renda */}
+      <Bar
+        dataKey="income"
+        name="Renda"
+        fill="#10b981"
+        radius={4}
+        isAnimationActive={false}
+        barSize={isMobile ? 18 : 28}
+        onMouseLeave={!isMobile ? deactivateBar : undefined}
+      >
+        {monthlyData.map((_, i) => (
+          <Cell
+            key={`inc-${i}`}
+            opacity={activeMonthIdx === null || activeMonthIdx === i ? 1 : 0.35}
+            onMouseEnter={!isMobile ? () => setActiveMonthIdx(i) : undefined}
+            onClick={() => setActiveMonthIdx(prev => (prev === i ? null : i))}
+            onTouchStart={() => setActiveMonthIdx(prev => (prev === i ? null : i))}
+          />
+        ))}
+      </Bar>
+
+      {/* Gastos */}
+      <Bar
+        dataKey="expenses"
+        name="Gastos"
+        fill="#ef4444"
+        radius={4}
+        isAnimationActive={false}
+        barSize={isMobile ? 18 : 28}
+        onMouseLeave={!isMobile ? deactivateBar : undefined}
+      >
+        {monthlyData.map((_, i) => (
+          <Cell
+            key={`exp-${i}`}
+            opacity={activeMonthIdx === null || activeMonthIdx === i ? 1 : 0.35}
+            onMouseEnter={!isMobile ? () => setActiveMonthIdx(i) : undefined}
+            onClick={() => setActiveMonthIdx(prev => (prev === i ? null : i))}
+            onTouchStart={() => setActiveMonthIdx(prev => (prev === i ? null : i))}
+          />
+        ))}
+      </Bar>
+    </BarChart>
+  </ChartContainer>
+  </div>
+</CardContent>
+
         </Card>
       </div>
 
