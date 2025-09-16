@@ -489,7 +489,7 @@ const monthlyData: MonthlyPoint[] = useMemo(() => {
             </CardTitle>
             <CardDescription className="text-slate-400">
               {/* >>> TROCA: descrição do card */}
-              renda_fixa + receitas do mês − (gastos_fixos + despesas do mês)
+              O que sobrou este mês: receitas − despesas
             </CardDescription>
           </CardHeader>
           <CardContent className="text-2xl font-semibold text-emerald-400">

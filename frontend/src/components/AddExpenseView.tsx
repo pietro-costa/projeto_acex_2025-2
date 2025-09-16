@@ -63,12 +63,8 @@ function InfoTiposCard({ tipoSelecionado }: { tipoSelecionado: TipoTransacao }) 
         <div className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/5 p-3">
           <AlertTriangle className="h-4 w-4 text-amber-400 mt-0.5" />
           <p className="text-xs text-amber-200">
-            <strong>Aviso:</strong> <span className="font-semibold">Receita</span>{" "}
-            <span className="underline decoration-amber-400/60">não contempla vales</span>{" "}
-            (refeição/alimentação ou transporte). Esses benefícios não são entradas de
-            dinheiro; registre os gastos pagos com vale como{" "}
-            <span className="font-semibold text-slate-100">Despesa</span> na categoria
-            correspondente.
+            <strong>Aviso: </strong>
+            A Finty não contabiliza vales (refeição/alimentação e transporte) como receita, porque não representam saldo em conta. Por isso, não entram no saldo do mês.{" "}
           </p>
         </div>
 
