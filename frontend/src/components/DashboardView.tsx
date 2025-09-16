@@ -35,6 +35,9 @@ import {
 } from "@/lib/api";
 import { getUserId } from "@/lib/user";
 import { onDataUpdated } from "@/lib/events";
+import  FaleConosco  from "@/components/FaleConosco";
+
+
 
 type MonthlyPoint = { month: string; expenses: number; income: number };
 type PiePoint = { category: string; amount: number };
@@ -538,6 +541,7 @@ const monthlyData: MonthlyPoint[] = useMemo(() => {
             <div className="text-slate-300">Despesas: {fmtBRL(totalDespesas)}</div>
           </CardContent>
         </Card>
+        
       </div>
 
       {/* Dica */}
@@ -745,8 +749,23 @@ const monthlyData: MonthlyPoint[] = useMemo(() => {
             </div>
           </CardContent>
         </Card>
-      </div>
+        {/* ==== RODAPÉ DA ABA PAINEL ==== */}
+        <div className="md:col-span-2 w-full flex justify-center">
+      <FaleConosco
+        companyName="FINTY"
+        year={2025}
+        cnpj="00.000.000/0000-00"
+        contactTitle="Fale Conosco"
+        contactName="Finty Análise"
+        email="finty.adm@gmail.com"
+        className="mt-8"
+      />
     </div>
+  </div> {/* fecha o CONTAINER mx-auto px-4 */}
+      </div>
+
+    
+    
   );
 };
 
