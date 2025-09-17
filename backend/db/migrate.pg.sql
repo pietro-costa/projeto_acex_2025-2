@@ -37,6 +37,7 @@ insert into categoria (nome_categoria, tipo) values
 ('Outros','despesa')
 on conflict do nothing;
 
+<<<<<<< HEAD
 alter table if exists usuario
   add column if not exists email_verificado boolean not null default false,
   add column if not exists token_verificacao text,
@@ -51,3 +52,12 @@ alter table if exists usuario
 
 create index if not exists idx_usuario_reset_token
   on usuario(reset_token);
+=======
+
+ALTER TABLE usuario
+  ADD COLUMN IF NOT EXISTS data_cadastro date NOT NULL DEFAULT CURRENT_DATE;
+
+
+UPDATE usuario
+SET data_cadastro = COALESCE(data_cadastro, CURRENT_DATE);
+>>>>>>> 9d502db (correção do card 'conta criada há X dias' para usar data de cadastro real)

@@ -657,8 +657,9 @@ app.get('/api/analytics/account-stats/:id_usuario', auth, sameUserParam('id_usua
 
     const { rows } = await pool.query(
       `
-      WITH base AS (
+                  WITH base AS (
         SELECT 
+          u.created_at::date                         AS data_ref,
           COALESCE(u.renda_fixa, 0)::numeric(12,2)   AS renda_fixa,
           COALESCE(u.gastos_fixos, 0)::numeric(12,2) AS gastos_fixos
         FROM usuario u
@@ -669,21 +670,18 @@ app.get('/api/analytics/account-stats/:id_usuario', auth, sameUserParam('id_usua
         FROM transacao
         WHERE id_usuario = $1
           AND date_trunc('month', data_transacao) = date_trunc('month', CURRENT_DATE)
-      ),
-      primeiro_reg AS (
-        SELECT MIN(data_transacao)::date AS dt
-        FROM transacao
-        WHERE id_usuario = $1
       )
       SELECT
-        COALESCE((SELECT (CURRENT_DATE - dt)::int FROM primeiro_reg WHERE dt IS NOT NULL), 0) AS dias_conta,
+        GREATEST(0, (CURRENT_DATE - (SELECT data_ref FROM base))::int) AS dias_conta,
         (SELECT COUNT(*) FROM transacao t WHERE t.id_usuario = $1)::int AS total_gastos,
         GREATEST(
           0,
           (SELECT renda_fixa  FROM base)
           - (SELECT gastos_fixos FROM base)
           - (SELECT total       FROM desp_mes)
-        )::numeric(12,2) AS economia_mes
+        )::numeric(12,2) AS economia_mes;
+
+
       `
       , [id]
     );
