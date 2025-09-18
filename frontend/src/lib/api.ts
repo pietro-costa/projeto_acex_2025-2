@@ -196,4 +196,25 @@ export function resetPassword(token: string, senha: string, confirm_senha: strin
   });
 }
 
+export type UpdateTransacaoBody = {
+  id_categoria: number;
+  valor: number | string;
+  descricao?: string | null;
+  data_transacao: string;  
+  tipo: "receita" | "despesa";
+};
+
+export function updateTransacao(id_transacao: number, body: UpdateTransacaoBody) {
+  return api<{ ok: boolean }>(`/api/transacoes/${id_transacao}`, {
+    method: "PUT",         
+    body: JSON.stringify(body),
+  });
+}
+
+export function deleteTransacao(id_transacao: number) {
+  return api<{ ok: boolean }>(`/api/transacoes/${id_transacao}`, {
+    method: "DELETE",
+  });
+}
+
 export { api };
