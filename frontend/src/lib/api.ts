@@ -121,6 +121,17 @@ export const postTransacao = (t: NewTransacao) =>
 export const getTransacoes = (idUsuario: number, tipo?: "despesa" | "receita") =>
   api<Transacao[]>(`/api/transacoes/${idUsuario}${tipo ? `?tipo=${tipo}` : ""}`);
 
+export const putTransacao = (idTransacao: number, patch: Partial<NewTransacao>) =>
+  api<Transacao>(`/api/transacoes/${idTransacao}`, {
+    method: 'PUT',
+    body: JSON.stringify(patch),
+  });
+
+ export const deleteTransacao = (idTransacao: number) =>
+  api<{ ok: boolean }>(`/api/transacoes/${idTransacao}`, {
+    method: 'DELETE',
+  });
+
 export const getSumByCategory = (idUsuario: number, tipo?: "despesa" | "receita") =>
   api<SumByCategory[]>(
     `/api/analytics/sum-by-category/${idUsuario}${tipo ? `?tipo=${tipo}` : ""}`

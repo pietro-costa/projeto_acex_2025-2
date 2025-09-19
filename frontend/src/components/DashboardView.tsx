@@ -6,6 +6,11 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from "@/components/ui/select";
 import { ChartContainer } from "@/components/ui/chart";
 import {
   BarChart,
@@ -31,9 +36,12 @@ import {
   getTransacoes,
   getUsuario,
   getCategorias,
+  putTransacao,
+  deleteTransacao,      
   type Transacao,
   type Usuario,
 } from "@/lib/api";
+
 import { getUserId } from "@/lib/user";
 import { onDataUpdated } from "@/lib/events";
 import FaleConosco from "@/components/FaleConosco";
@@ -61,6 +69,7 @@ export const DashboardView = () => {
   const [usuario, setUsuario] = useState<Usuario | null>(null);
   const [transacoes, setTransacoes] = useState<Transacao[]>([]);
   const [categoriasDict, setCategoriasDict] = useState<Record<number, string>>({});
+  const [categoriasList, setCategoriasList] = useState<any[]>([]);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [chartW, setChartW] = useState(0);
   const [chartH, setChartH] = useState(0);
@@ -68,6 +77,12 @@ export const DashboardView = () => {
   const [vw, setVw] = useState(0);
   const isDesktop = vw >= 1024;
   const isTablet = vw >= 768 && vw < 1024;
+  const [editOpen, setEditOpen] = useState(false);
+  const [editing, setEditing] = useState<Transacao | null>(null);
+  const [formDescricao, setFormDescricao] = useState("");
+  const [formValor, setFormValor] = useState("");
+  const [formData, setFormData] = useState("");
+  const [formCategoria, setFormCategoria] = useState<number | null>(null);
 
   useEffect(() => {
     const compute = () =>
@@ -325,10 +340,11 @@ const renderSmartLabel = (props: any) => {
 };
 
 
-
-
   const idUsuario = getUserId();
-  const nowMonth = new Date().toISOString().slice(0, 7);
+  const _now = new Date();
+  const nowMonth = `${_now.getFullYear()}-${String(_now.getMonth() + 1).padStart(2, "0")}`;
+
+  
 
   const fetchAll = async () => {
     setLoading(true);
@@ -345,6 +361,7 @@ const renderSmartLabel = (props: any) => {
         (cats as any[]).map((c: any) => [c.id_categoria, c.nome_categoria])
       );
       setCategoriasDict(dict);
+      setCategoriasList(cats as any[]);
 
       setError(null);
     } catch (e: any) {
@@ -551,6 +568,54 @@ const renderSmartLabel = (props: any) => {
       icon: <CheckCircle className="w-5 h-5 text-emerald-500" />,
     };
   })();
+      const toISODate = (s: string) => {
+        if (!s) return s;
+      
+        if (s.includes('/')) {
+          const [dd, mm, yyyy] = s.split('/');
+          return `${yyyy}-${mm.padStart(2,'0')}-${dd.padStart(2,'0')}`;
+        }
+        return s; 
+      };
+
+        function openEdit(t: Transacao) {
+        setEditing(t);
+        setFormDescricao(t.descricao || "");
+        setFormValor(String(t.valor));
+        const todayISO = new Date(Date.now() - new Date().getTimezoneOffset()*60000).toISOString().slice(0,10);
+        setFormData(toISODate(t.data_transacao) || todayISO);
+        setFormCategoria(t.id_categoria);
+        setEditOpen(true);
+      }
+
+      async function handleSave() {
+        if (!editing) return;
+
+        const patch = {
+          id_usuario: editing.id_usuario,
+          tipo: editing.tipo,
+          descricao: formDescricao,
+          valor: formValor,                        
+          data_transacao: formData,
+          id_categoria: formCategoria ?? editing.id_categoria,
+        };
+
+        async function handleDelete() {
+        if (!editing) return;
+        const ok = window.confirm("Tem certeza que deseja excluir esta transação?");
+        if (!ok) return;
+
+        await deleteTransacao(editing.id_transacao);
+        setEditOpen(false);
+        setEditing(null);
+        await fetchAll();
+}
+
+        await putTransacao(editing.id_transacao, patch);
+        setEditOpen(false);
+        setEditing(null);
+        await fetchAll();                          
+}
 
   return (
     <div className="space-y-6">
@@ -819,20 +884,17 @@ const renderSmartLabel = (props: any) => {
             {fmtBRL(Number(t.valor))}
           </div>
 
-          <button
-            type="button"
-            className="p-1 rounded-md hover:bg-slate-800/60 focus:outline-none focus:ring-2 focus:ring-amber-400/40"
-            onClick={() =>
-              alert(
-                `Editar valor de ${t.descricao || rotuloPadrao} (ID ${t.id_transacao})`
-              )
-            }
-            title="Editar valor"
-            aria-label="Editar valor"
-          >
-            <Pencil className="w-4 h-4 text-slate-300" />
-                      </button>
-                    </div>
+             <button
+              type="button"
+              className="p-1 rounded-md hover:bg-slate-800/60 focus:outline-none focus:ring-2 focus:ring-amber-400/40"
+              onClick={() => openEdit(t)}
+              title="Editar lançamento"
+              aria-label="Editar lançamento"
+            >
+              <Pencil className="w-4 h-4 text-slate-300" />
+            </button>
+
+                      </div>
                   </div>
                 );
               })}
@@ -840,9 +902,85 @@ const renderSmartLabel = (props: any) => {
             </div>
           </CardContent>
         </Card>
+        <Dialog open={editOpen} onOpenChange={setEditOpen}>
+          <DialogContent className="bg-slate-900 border border-slate-700">
+            <DialogHeader>
+              <DialogTitle className="text-white">
+                Editar {editing?.tipo === "receita" ? "Receita" : "Despesa"}
+              </DialogTitle>
+            </DialogHeader>
 
-        {/* ==== RODAPÉ DA ABA PAINEL ==== */}
-        <div className="md:col-span-2 w-full flex justify-center">
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label className="text-slate-300">Descrição</Label>
+                <Input
+                  value={formDescricao}
+                  onChange={(e) => setFormDescricao(e.target.value)}
+                  className="bg-slate-800 border-slate-700 text-white"
+                  placeholder={editing?.tipo === "receita" ? "Ex.: Salário" : "Ex.: Supermercado"}
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-slate-300">Valor</Label>
+                  <Input
+                    value={formValor}
+                    onChange={(e) => setFormValor(e.target.value)}
+                    className="bg-slate-800 border-slate-700 text-white"
+                    placeholder="Ex.: 150,00"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-slate-300">Data</Label>
+                  <Input
+                  type="date"
+                  value={formData}
+                  onChange={(e) => setFormData(e.target.value)}
+                  className="bg-slate-800 border-slate-700 text-white"
+                />
+
+
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-slate-300">Categoria</Label>
+                <Select
+                  value={String(formCategoria ?? "")}
+                  onValueChange={(v) => setFormCategoria(Number(v))}
+                >
+                  <SelectTrigger className="bg-slate-800 border-slate-700 text-white">
+                    <SelectValue placeholder="Selecione a categoria" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-slate-900 text-white border-slate-700">
+                    {(categoriasList || [])
+                      .filter((c: any) => c.tipo === editing?.tipo) // mostra apenas do mesmo tipo
+                      .map((c: any) => (
+                        <SelectItem key={c.id_categoria} value={String(c.id_categoria)}>
+                          {c.nome_categoria}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <DialogFooter className="mt-4">
+              <Button variant="ghost" onClick={() => setEditOpen(false)} className="text-slate-300">
+                Cancelar
+              </Button>
+              <Button onClick={handleSave} className="bg-amber-500 hover:bg-amber-600 text-slate-900">
+                Salvar
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+          
+          
+          <div className="md:col-span-2 w-full flex justify-center">
           <FaleConosco
             companyName="FINTY"
             year={2025}
