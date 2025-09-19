@@ -373,6 +373,18 @@ const renderSmartLabel = (props: any) => {
     () => transacoes.filter((t) => t.tipo === "despesa"),
     [transacoes]
   );
+   
+ 
+   
+  const ultimosLancamentos = useMemo(
+    () =>
+      [...transacoes]
+        .filter((t) => t.data_transacao.startsWith(nowMonth))
+        .sort((a, b) => b.data_transacao.localeCompare(a.data_transacao)),
+    [transacoes, nowMonth]
+  );
+
+
 
   // despesas do mês atual
   const despesasMes = useMemo(
@@ -771,52 +783,60 @@ const renderSmartLabel = (props: any) => {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <Card className="md:col-span-2 bg-slate-800 border border-slate-700 shadow-sm">
           <CardHeader>
-            <CardTitle className="text-white">Últimas Despesas</CardTitle>
+            <CardTitle className="text-white">Últimos lançamentos</CardTitle>
             <CardDescription className="text-slate-400">
-              Seus lançamentos mais recentes (mês e históricos)
+              Seus lançamentos deste mês (despesas e receitas)
             </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {despesas.length === 0 && (
-                <div className="text-slate-400">Sem despesas registradas.</div>
-              )}
-              {[...despesas]
-                .sort((a, b) => b.data_transacao.localeCompare(a.data_transacao))
-                .slice(0, 6)
-                .map((t) => (
-                  <div
-                    key={t.id_transacao}
-                    className="flex items-center justify-between rounded-lg bg-slate-900/60 px-3 py-2"
-                  >
-                    <div className="min-w-0">
-                      <div className="truncate text-slate-100">
-                        {t.descricao || "Despesa"}
-                      </div>
-                      <div className="text-xs text-slate-400">
-                        {fmtDia(t.data_transacao)} •{" "}
-                        {categoriasDict[t.id_categoria] ?? `Categoria #${t.id_categoria}`}
-                      </div>
-                    </div>
-                   <div className="flex items-center gap-2">
-  <div className="font-semibold text-rose-300">
-    {fmtBRL(Number(t.valor))}
-  </div>
+              {ultimosLancamentos.length === 0 && (
+            <div className="text-slate-400">Sem lançamentos registrados.</div>
+                )}
 
-  <button
-    type="button"
-    className="p-1 rounded-md hover:bg-slate-800/60 focus:outline-none focus:ring-2 focus:ring-amber-400/40"
-    onClick={() =>
-      alert(`Editar valor de ${t.descricao || "Despesa"} (ID ${t.id_transacao})`)
-    }
-    title="Editar valor"
-    aria-label="Editar valor"
-  >
-    <Pencil className="w-4 h-4 text-slate-300" />
-  </button>
-</div>
+              {[...ultimosLancamentos]
+  .map((t) => {
+    const isReceita = t.tipo === "receita";
+    const valorClass = isReceita ? "text-emerald-300" : "text-rose-300";
+    const rotuloPadrao = isReceita ? "Receita" : "Despesa";
+    return (
+      <div
+        key={t.id_transacao}
+        className="flex items-center justify-between rounded-lg bg-slate-900/60 px-3 py-2"
+      >
+        <div className="min-w-0">
+          <div className="truncate text-slate-100">
+            {t.descricao || rotuloPadrao}
+          </div>
+          <div className="text-xs text-slate-400">
+            {fmtDia(t.data_transacao)} •{" "}
+            {categoriasDict[t.id_categoria] ?? `Categoria #${t.id_categoria}`}
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <div className={`font-semibold ${valorClass}`}>
+            {fmtBRL(Number(t.valor))}
+          </div>
+
+          <button
+            type="button"
+            className="p-1 rounded-md hover:bg-slate-800/60 focus:outline-none focus:ring-2 focus:ring-amber-400/40"
+            onClick={() =>
+              alert(
+                `Editar valor de ${t.descricao || rotuloPadrao} (ID ${t.id_transacao})`
+              )
+            }
+            title="Editar valor"
+            aria-label="Editar valor"
+          >
+            <Pencil className="w-4 h-4 text-slate-300" />
+                      </button>
+                    </div>
                   </div>
-                ))}
+                );
+              })}
+
             </div>
           </CardContent>
         </Card>
