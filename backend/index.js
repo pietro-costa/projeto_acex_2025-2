@@ -788,6 +788,76 @@ app.post('/api/mensal/garantir', auth, async (req, res) => {
   }
 });
 
+app.put('/api/transacoes/:id_transacao', auth, async (req, res) => {
+  try {
+    const { id_transacao } = req.params;
+    const { id_categoria, descricao, valor, data_transacao } = req.body ?? {};
+
+    const q1 = await pool.query(
+      'select id_usuario, tipo from transacao where id_transacao = $1',
+      [id_transacao]
+    );
+    if (q1.rowCount === 0) return res.status(404).json({ error: 'transação não encontrada' });
+    if (Number(q1.rows[0].id_usuario) !== Number(req.user?.sub)) {
+      return res.status(403).json({ error: 'forbidden' });
+    }
+
+    let valorNum = undefined;
+    if (valor !== undefined && valor !== null && valor !== '') {
+      valorNum = typeof valor === 'number'
+        ? valor
+        : Number(String(valor).replace(/\./g, '').replace(',', '.'));
+      if (!Number.isFinite(valorNum) || valorNum < 0) {
+        return res.status(400).json({ error: 'valor inválido' });
+      }
+    }
+
+    const sets = [];
+    const args = [];
+    let i = 1;
+
+    if (id_categoria !== undefined) { sets.push(`id_categoria = $${i++}`); args.push(id_categoria); }
+    if (descricao    !== undefined) { sets.push(`descricao = $${i++}`);    args.push(descricao ?? null); }
+    if (valorNum     !== undefined) { sets.push(`valor = $${i++}`);        args.push(valorNum); }
+    if (data_transacao !== undefined) { sets.push(`data_transacao = $${i++}`); args.push(data_transacao); }
+
+    if (sets.length === 0) return res.status(400).json({ error: 'nenhum campo para atualizar' });
+
+    args.push(id_transacao);
+    const sql = `update transacao set ${sets.join(', ')} where id_transacao = $${i} returning *`;
+    const { rows } = await pool.query(sql, args);
+
+    return res.json(rows[0]);
+  } catch (e) {
+    console.error('PUT /api/transacoes/:id_transacao erro:', e);
+    return res.status(500).json({ error: 'erro ao atualizar transação' });
+  }
+});
+
+
+app.delete('/api/transacoes/:id_transacao', auth, async (req, res) => {
+  try {
+    const { id_transacao } = req.params;
+
+  
+    const q1 = await pool.query(
+      'select id_usuario from transacao where id_transacao = $1',
+      [id_transacao]
+    );
+    if (q1.rowCount === 0) return res.status(404).json({ error: 'transação não encontrada' });
+    if (Number(q1.rows[0].id_usuario) !== Number(req.user?.sub)) {
+      return res.status(403).json({ error: 'forbidden' });
+    }
+
+    await pool.query('delete from transacao where id_transacao = $1', [id_transacao]);
+    return res.json({ ok: true });
+  } catch (e) {
+    console.error('DELETE /api/transacoes/:id_transacao erro:', e);
+    return res.status(500).json({ error: 'erro ao excluir transação' });
+  }
+});
+
+
 app.get('/api/analytics/sum-by-category/:id_usuario', auth, sameUserParam('id_usuario'), async (req, res) => {
   try {
     const { id_usuario } = req.params;

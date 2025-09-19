@@ -6,7 +6,12 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { ChartContainer} from "@/components/ui/chart";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from "@/components/ui/select";
+import { ChartContainer } from "@/components/ui/chart";
 import {
   BarChart,
   Bar,
@@ -25,20 +30,22 @@ import {
   TrendingDown,
   AlertTriangle,
   CheckCircle,
+  Pencil,
 } from "lucide-react";
 import {
   getTransacoes,
   getUsuario,
   getCategorias,
   postGarantirMes,
+  putTransacao,
+  deleteTransacao,
   type Transacao,
   type Usuario,
 } from "@/lib/api";
+
 import { getUserId } from "@/lib/user";
 import { onDataUpdated } from "@/lib/events";
-import  FaleConosco  from "@/components/FaleConosco";
-
-
+import FaleConosco from "@/components/FaleConosco";
 
 type MonthlyPoint = { month: string; expenses: number; income: number };
 type PiePoint = { category: string; amount: number };
@@ -53,9 +60,9 @@ const fmtBRL = (n: number) =>
 
 const fmtDia = (s: string) => {
   const d = new Date(s);
-  return Number.isNaN(d.getTime()) ? s : d.toLocaleDateString("pt-BR"); // 09/09/2025
+  return Number.isNaN(d.getTime()) ? s : d.toLocaleDateString("pt-BR");
 };
-const fmtMes = (s: string) => s.replace("-", "/"); // "2025-09" -> "2025/09"
+const fmtMes = (s: string) => s.replace("-", "/");
 
 export const DashboardView = () => {
   const [loading, setLoading] = useState(true);
@@ -63,205 +70,282 @@ export const DashboardView = () => {
   const [usuario, setUsuario] = useState<Usuario | null>(null);
   const [transacoes, setTransacoes] = useState<Transacao[]>([]);
   const [categoriasDict, setCategoriasDict] = useState<Record<number, string>>({});
+  const [categoriasList, setCategoriasList] = useState<any[]>([]);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [chartW, setChartW] = useState(0);
   const [chartH, setChartH] = useState(0);
   const [isMobile, setIsMobile] = useState(false);
   const [vw, setVw] = useState(0);
-  const isDesktop = vw >= 1024; 
-  const isTablet  = vw >= 768 && vw < 1024;
+  const isDesktop = vw >= 1024;
+  const isTablet = vw >= 768 && vw < 1024;
+  const [editOpen, setEditOpen] = useState(false);
+  const [editing, setEditing] = useState<Transacao | null>(null);
+  const [formDescricao, setFormDescricao] = useState("");
+  const [formValor, setFormValor] = useState("");
+  const [formData, setFormData] = useState("");
+  const [formCategoria, setFormCategoria] = useState<number | null>(null);
 
-useEffect(() => {
-  const compute = () =>
-    typeof window !== "undefined" &&
-    (window.matchMedia("(pointer: coarse)").matches || window.innerWidth < 768);
+  useEffect(() => {
+    const compute = () =>
+      typeof window !== "undefined" &&
+      (window.matchMedia("(pointer: coarse)").matches || window.innerWidth < 768);
 
-  const onResize = () => {
+    const onResize = () => {
+      setIsMobile(compute());
+      if (typeof window !== "undefined") setVw(window.innerWidth);
+    };
+
     setIsMobile(compute());
-    if (typeof window !== "undefined") setVw(window.innerWidth); 
-  };
+    if (typeof window !== "undefined") setVw(window.innerWidth);
 
-  // inicial
-  setIsMobile(compute());
-  if (typeof window !== "undefined") setVw(window.innerWidth);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
 
-  window.addEventListener("resize", onResize);
-  return () => window.removeEventListener("resize", onResize);
-}, []);
   const [activeMonthIdx, setActiveMonthIdx] = useState<number | null>(null);
   const activateBar = (payload: any, i?: number) => {
     const idx =
       typeof i === "number"
-      ? i
-      : typeof payload === "number"
-      ? payload
-      : typeof payload?.index === "number"
-      ? payload.index
-      : null;
-  if (idx !== null) setActiveMonthIdx(idx);
-};
+        ? i
+        : typeof payload === "number"
+          ? payload
+          : typeof payload?.index === "number"
+            ? payload.index
+            : null;
+    if (idx !== null) setActiveMonthIdx(idx);
+  };
   const deactivateBar = () => setActiveMonthIdx(null);
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const activate = (payload: any, i?: number) => {
     const idx =
-      typeof i === "number" ? i :
-      typeof payload === "number" ? payload :
-      typeof payload?.index === "number" ? payload.index : null;
+      typeof i === "number"
+        ? i
+        : typeof payload === "number"
+          ? payload
+          : typeof payload?.index === "number"
+            ? payload.index
+            : null;
     if (idx !== null) setActiveIndex(idx);
   };
   const deactivate = () => setActiveIndex(null);
 
-useEffect(() => {
-  if (!containerRef.current) return;
-  const ro = new ResizeObserver((entries) => {
-    const r = entries[0]?.contentRect;
-    if (r?.width) setChartW(r.width);
-    if (r?.height) setChartH(r.height);
-  });
-  ro.observe(containerRef.current);
-  return () => ro.disconnect();
-}, []);
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const ro = new ResizeObserver((entries) => {
+      const r = entries[0]?.contentRect;
+      if (r?.width) setChartW(r.width);
+      if (r?.height) setChartH(r.height);
+    });
+    ro.observe(containerRef.current);
+    return () => ro.disconnect();
+  }, []);
 
- // mantém os trackers acima desta função:
-let lastYLeft  = Number.NaN;
-let lastYRight = Number.NaN;
+  let lastYLeft = Number.NaN;
+  let lastYRight = Number.NaN;
 
-const renderSmartLabel = (props: any) => {
-  const RAD = Math.PI / 180;
-  const {
-    cx, cy, midAngle, outerRadius, name, category, value, amount, index,
-  } = props;
+  const renderSmartLabel = (props: any) => {
+    const RAD = Math.PI / 180;
+    const { cx, cy, midAngle, outerRadius, name, category, value, amount, index } = props;
 
-  // reinicia os rastreadores no 1º setor
-  if (index === 0) {
-    lastYLeft = Number.NaN;
-    lastYRight = Number.NaN;
-  }
+    if (index === 0) { lastYLeft = Number.NaN; lastYRight = Number.NaN; }
 
-  // --- helpers de responsividade ---
-  const veryNarrow = chartW <= 360;       // Galaxy S8/S9 etc.
-  const narrow     = chartW < 340;
+    const veryNarrow = chartW <= 360;
+    const narrow = chartW < 340;
 
-  // encurta o texto em telas estreitas (tooltip mantém o nome completo)
-  const fullText = String(name ?? category ?? "");
-  const shortText =
-    veryNarrow && fullText.length > 12
-      ? fullText.slice(0, 11) + "…"
-      : narrow && fullText.length > 14
-      ? fullText.slice(0, 13) + "…"
-      : fullText;
+    // tipografia base
+    const basePx = veryNarrow ? 9 : narrow ? 10 : isDesktop ? 18 : 12;
+    const charW = basePx * 0.62;
+    const maxLines = isDesktop ? 3 : 2;
+    const maxLabelW = isDesktop ? 320 : 150; // largura útil do bloco (nome)
 
-  const moneyText = fmtBRL(Number(value ?? amount ?? 0));
-  const color = pieColors[index % pieColors.length];
+    // normalizador
+    const normalize = (s: string) =>
+      String(s).normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
 
-  const or = outerRadius ?? 0;
-  const elbow1 = 14;
-  const elbow2 = veryNarrow ? 20 : (chartW < 360 ? 22 : 22); // braço ligeiramente menor no super-estreito
-  const r = or + elbow1 + elbow2;
+    // quebras forçadas por device
+    const FORCE_WRAP_MOBILE: Record<string, string[]> = {
+      "roupas e acessorios": ["Roupas e", "Acessórios"],
+      "alimentacao": ["Alimenta-", "ção"], // só mobile/tablet usa hífen aqui
+    };
+    const FORCE_WRAP_DESKTOP: Record<string, string[]> = {
+      "roupas e acessorios": ["Roupas e", "Acessórios"], // desktop mantém 2 linhas
+      // "alimentacao" fora => fica inteiro no desktop
+    };
 
-  const baseX = cx + Math.cos(-RAD * midAngle) * r;
-  const baseY = cy + Math.sin(-RAD * midAngle) * r;
+    // wrap por palavras com fallback para palavras longas (hífen)
+    const wrap = (text: string) => {
+      const key = normalize(text);
+      const forced = (isDesktop ? FORCE_WRAP_DESKTOP : FORCE_WRAP_MOBILE)[key];
+      if (forced) return forced.slice(0, maxLines);
 
-  const padX = veryNarrow ? 12 : 10;
-  const padY = 10;
-  const edgeLeft   = padX;
-  const edgeRight  = chartW ? chartW - padX : Infinity;
-  const edgeTop    = padY;
-  const edgeBottom = chartH ? chartH - padY : Infinity;
+      const words = String(text).split(/\s+/).filter(Boolean);
+      const lines: string[] = [];
+      let cur = "";
+      const maxChars = Math.max(6, Math.floor(maxLabelW / (basePx * 0.62)));
 
-  // posição inicial + clamp horizontal
-  let x = chartW ? Math.max(edgeLeft, Math.min(baseX, edgeRight)) : baseX;
-  let y = baseY;
+      const pushCur = () => { if (cur) { lines.push(cur); cur = ""; } };
 
-  // lado + âncora
-  let onRight = x > cx;
-  let anchor: "start" | "end" = onRight ? "start" : "end";
+      for (let i = 0; i < words.length; i++) {
+        const w = words[i];
+        if (w.length > maxChars) {
+          // quebra com hífen apenas quando necessário
+          pushCur();
+          let rest = w;
+          while (rest.length > maxChars && lines.length < maxLines - 1) {
+            lines.push(rest.slice(0, maxChars - 1) + "-");
+            rest = rest.slice(maxChars - 1);
+          }
+          if (rest) {
+            if (lines.length < maxLines) cur = rest;
+            else lines[lines.length - 1] = (lines[lines.length - 1] || "") + rest;
+          }
+        } else {
+          const next = cur ? `${cur} ${w}` : w;
+          if (next.length <= maxChars) cur = next;
+          else { pushCur(); cur = w; }
+        }
+        if (lines.length >= maxLines) break;
+      }
+      pushCur();
+      return lines.slice(0, maxLines);
+    };
 
-  // se encostar na borda, ancora para dentro
-  const flipThresh = veryNarrow ? 40 : 28;
-  if (chartW && x > edgeRight - 8) { x = edgeRight - 2; anchor = "end"; onRight = true; }
-  if (chartW && x < edgeLeft  + 8) { x = edgeLeft  + 2; anchor = "start"; onRight = false; }
+    const fullText = String(name ?? category ?? "");
+    const nameLines = wrap(fullText);
 
-  // pontos da linha
-  const sx = cx + Math.cos(-RAD * midAngle) * or;
-  const sy = cy + Math.sin(-RAD * midAngle) * or;
-  const mx = cx + Math.cos(-RAD * midAngle) * (or + elbow1);
-  const my = cy + Math.sin(-RAD * midAngle) * (or + elbow1);
-  const hx = cx + Math.cos(-RAD * midAngle) * (or + elbow1 + elbow2);
-  const hy = cy + Math.sin(-RAD * midAngle) * (or + elbow1 + elbow2);
+    const moneyText = fmtBRL(Number(value ?? amount ?? 0));
+    const color = pieColors[index % pieColors.length];
 
-  // afasta da quina + re-clamp horizontal
-  x += anchor === "start" ? 6 : -6;
-  x  = chartW ? Math.max(edgeLeft, Math.min(x, edgeRight)) : x;
+    // geometria da linha
+    const or = outerRadius ?? 0;
+    const normDeg = ((midAngle % 360) + 360) % 360;
+    const downward = normDeg > 235 && normDeg < 305; // apontando para baixo
 
-  // anti-colisão por lado
-  const MIN_GAP = veryNarrow ? 12 : (narrow ? 14 : 16);
-  y += (index % 2 === 0 ? -6 : 6);
-  if (onRight) {
-    if (!Number.isFinite(lastYRight)) lastYRight = y;
-    else if (Math.abs(y - lastYRight) < MIN_GAP)
-      y = lastYRight + (y >= lastYRight ? 1 : -1) * MIN_GAP;
-    lastYRight = y;
-  } else {
-    if (!Number.isFinite(lastYLeft)) lastYLeft = y;
-    else if (Math.abs(y - lastYLeft) < MIN_GAP)
-      y = lastYLeft + (y >= lastYLeft ? 1 : -1) * MIN_GAP;
-    lastYLeft = y;
-  }
+    let arm =
+      isDesktop ? Math.max(36, Math.round(or * 0.26)) :
+        isTablet ? Math.max(40, Math.round(or * 0.30)) :
+          Math.max(38, Math.round(or * 0.30));
+    if (downward && !isDesktop && !isTablet) arm = Math.max(28, Math.round(or * 0.24)); // mobile p/ baixo: encurta
 
-  // clamp vertical (considera bloco de 2 linhas)
-  const fontPx = veryNarrow ? 9 : (narrow ? 10 : 12);
-  const charW  = fontPx * 0.62;
-  const estW   = Math.min(shortText.length * charW, 140);
-  const blockHalf = fontPx; // aprox. duas linhas
-  if (chartH) {
-    const topSafe = edgeTop + blockHalf;
-    const bottomSafe = edgeBottom - blockHalf;
-    y = Math.max(topSafe, Math.min(y, bottomSafe));
-  }
-if (chartW) {
-  if (anchor === "start" && x + estW > edgeRight - 2) {
-    // vira para dentro
-    anchor = "end";
-    x = Math.max(edgeLeft + 2, edgeRight - 2);        // referencia no limite
-  } else if (anchor === "end" && x - estW < edgeLeft + 2) {
-    anchor = "start";
-    x = Math.min(edgeRight - 2, edgeLeft + 2);
-  }
-}
-  const labelClass =
-    veryNarrow ? "text-[9px]"
-    : narrow    ? "text-[10px]"
-                : "text-xs";
+    const ang = -RAD * midAngle;
+    const sx = cx + Math.cos(ang) * or;
+    const sy = cy + Math.sin(ang) * or;
 
-  return (
-    <g pointerEvents="none">
-      <path
-        d={`M ${sx},${sy} L ${mx},${my} L ${hx},${hy} L ${x},${y}`}
-        fill="none"
-        stroke={color}
-        strokeWidth={1.5}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        opacity={0.95}
-      />
-      <text
-        x={x}
-        y={y}
-        textAnchor={anchor}
-        dominantBaseline="central"
-        className={labelClass}
-        fill={color}
-      >
-        <tspan x={x} dy="-0.6em">{shortText}</tspan>
-        <tspan x={x} dy="1.2em">{moneyText}</tspan>
-      </text>
-    </g>
-  );
-};
+    // alvo inicial
+    let x = cx + Math.cos(ang) * (or + arm);
+    let y = cy + Math.sin(ang) * (or + arm);
+
+    // bordas do card
+    const padX = veryNarrow ? 22 : 12; // folga maior no mobile estreito
+    const padY = 10;
+    const edgeLeft = padX;
+    const edgeRight = chartW ? chartW - padX : Infinity;
+    const edgeTop = padY;
+    const edgeBottom = chartH ? chartH - padY : Infinity;
+
+    // clamp inicial horizontal
+    if (chartW) x = Math.max(edgeLeft, Math.min(x, edgeRight));
+    let onRight = x > cx;
+    let anchor: "start" | "end" = onRight ? "start" : "end";
+
+    // anticolisão vertical por lado
+    const MIN_GAP = veryNarrow ? 20 : narrow ? 18 : 16;
+    y += (index % 2 === 0 ? -8 : 8);
+    if (onRight) {
+      if (!Number.isFinite(lastYRight)) lastYRight = y;
+      else if (Math.abs(y - lastYRight) < MIN_GAP) y = lastYRight + (y >= lastYRight ? 1 : -1) * MIN_GAP;
+      lastYRight = y;
+    } else {
+      if (!Number.isFinite(lastYLeft)) lastYLeft = y;
+      else if (Math.abs(y - lastYLeft) < MIN_GAP) y = lastYLeft + (y >= lastYLeft ? 1 : -1) * MIN_GAP;
+      lastYLeft = y;
+    }
+
+    // limites verticais (nome + valor)
+    const blockHalf = basePx * ((nameLines.length + 1) * 0.65);
+    if (chartH) {
+      const extraBottom = downward ? basePx * 0.6 : 0;
+      const topSafe = edgeTop + blockHalf;
+      const bottomSafe = edgeBottom - (blockHalf + extraBottom);
+      y = Math.max(topSafe, Math.min(y, bottomSafe));
+    }
+
+    // posição do texto + clamp lateral com largura do NOME **e do VALOR**
+    const labelPad = 8; // respiro entre linha e texto
+    const longestName = nameLines.reduce((m, s) => Math.max(m, s.length), 0);
+    const nameW = Math.min(longestName * charW, maxLabelW);
+    const moneyW = moneyText.length * charW * 1.05; // fator de segurança
+    const estW = Math.max(nameW, moneyW);         // largura do bloco inteiro
+
+    let tx = anchor === "start" ? x + labelPad : x - labelPad;
+
+    if (chartW) {
+      if (anchor === "start" && tx + estW > edgeRight - 2) {
+        tx = edgeRight - 2 - estW; // puxa bloco pra dentro
+        x = tx - labelPad;        // ajusta a ponta da linha
+      } else if (anchor === "end" && tx - estW < edgeLeft + 2) {
+        tx = edgeLeft + 2 + estW;
+        x = tx + labelPad;
+      }
+    }
+
+    // valor com fonte adaptativa apenas no mobile/tablet (se necessário)
+    let moneyPx = basePx;
+    if (!isDesktop) {
+      const avail = anchor === "start" ? (edgeRight - 2 - tx) : (tx - (edgeLeft + 2));
+      const needed = moneyW;
+      if (needed > avail) {
+        const scale = Math.max(0.85, Math.min(1, avail / (needed + 1))); // mínimo 85%
+        moneyPx = Math.round(basePx * scale);
+      }
+    }
+
+    const labelClass =
+      veryNarrow ? "text-[9px]" :
+        narrow ? "text-[10px]" :
+          isDesktop ? "text-[18px]" : "text-[12px]";
+
+    const firstDyEm = -((nameLines.length - 1) * 0.6);
+
+    return (
+      <g pointerEvents="none">
+        {/* linha reta da fatia até o texto */}
+        <path
+          d={`M ${sx},${sy} L ${x},${y}`}
+          fill="none"
+          stroke={color}
+          strokeWidth={1.8}
+          strokeLinecap="round"
+          opacity={0.95}
+        />
+        {/* bloco do label */}
+        <text
+          x={tx}
+          y={y}
+          textAnchor={anchor}
+          dominantBaseline="central"
+          className={labelClass}
+          fill={color}
+        >
+          {nameLines.map((line, i) => (
+            <tspan key={i} x={tx} dy={i === 0 ? `${firstDyEm}em` : "1.2em"}>
+              {line}
+            </tspan>
+          ))}
+          <tspan x={tx} dy="1.2em" style={{ fontSize: `${moneyPx}px` }}>
+            {moneyText}
+          </tspan>
+        </text>
+      </g>
+    );
+  };
+
 
   const idUsuario = getUserId();
-  const nowMonth = new Date().toISOString().slice(0, 7); // YYYY-MM
+  const _now = new Date();
+  const nowMonth = `${_now.getFullYear()}-${String(_now.getMonth() + 1).padStart(2, "0")}`;
+
+
 
   const fetchAll = async () => {
     setLoading(true);
@@ -269,7 +353,7 @@ if (chartW) {
       const ym = new Date().toISOString().slice(0, 7); // 'YYYY-MM'
       try {
         await postGarantirMes(ym); // idempotente
-      } catch {}
+      } catch { }
 
       const [u, t, cats] = await Promise.all([
         getUsuario(idUsuario),
@@ -283,6 +367,7 @@ if (chartW) {
         (cats as any[]).map((c: any) => [c.id_categoria, c.nome_categoria])
       );
       setCategoriasDict(dict);
+      setCategoriasList(cats as any[]);
 
       setError(null);
     } catch (e: any) {
@@ -312,6 +397,18 @@ if (chartW) {
     [transacoes]
   );
 
+
+
+  const ultimosLancamentos = useMemo(
+    () =>
+      [...transacoes]
+        .filter((t) => t.data_transacao.startsWith(nowMonth))
+        .sort((a, b) => b.data_transacao.localeCompare(a.data_transacao)),
+    [transacoes, nowMonth]
+  );
+
+
+
   // despesas do mês atual
   const despesasMes = useMemo(
     () =>
@@ -321,7 +418,7 @@ if (chartW) {
     [despesas, nowMonth]
   );
 
-  // >>> ADIÇÃO: receitas do mês atual
+  // receitas do mês atual
   const receitasMes = useMemo(
     () =>
       receitas
@@ -337,7 +434,7 @@ if (chartW) {
   // Saldo do mes
   const saldoMes = receitasMes - despesasMes;
 
-  // totais absolutos (todas as datas) — ainda usados em gráficos de evolução/saldo
+  // totais absolutos
   const totalReceitas = useMemo(
     () => receitas.reduce((acc, t) => acc + Number(t.valor), 0),
     [receitas]
@@ -348,71 +445,63 @@ if (chartW) {
   );
 
   // saldo diário acumulado (todas as datas)
-const saldoSeries: LinePoint[] = useMemo(() => {
-  const RANGE_MONTHS = 6; // mude se quiser outro intervalo
+  const saldoSeries: LinePoint[] = useMemo(() => {
+    const RANGE_MONTHS = 6;
 
-  const start = new Date();
-  start.setMonth(start.getMonth() - (RANGE_MONTHS - 1));
-  start.setDate(1); start.setHours(0,0,0,0);
+    const start = new Date();
+    start.setMonth(start.getMonth() - (RANGE_MONTHS - 1));
+    start.setDate(1);
+    start.setHours(0, 0, 0, 0);
 
-  const end = new Date();
-  end.setHours(23,59,59,999);
+    const end = new Date();
+    end.setHours(23, 59, 59, 999);
 
-  const normDay = (s: string) => {
-    const d = new Date(s);
-    return Number.isNaN(d.getTime()) ? s.slice(0,10) : d.toISOString().slice(0,10);
-  };
-  const ym = (s: string) => normDay(s).slice(0,7);
-  const inRange = (isoDay: string) => {
-    const d = new Date(isoDay);
-    return d >= start && d <= end;
-  };
+    const normDay = (s: string) => {
+      const d = new Date(s);
+      return Number.isNaN(d.getTime()) ? s.slice(0, 10) : d.toISOString().slice(0, 10);
+    };
+    const ym = (s: string) => normDay(s).slice(0, 7);
+    const inRange = (isoDay: string) => {
+      const d = new Date(isoDay);
+      return d >= start && d <= end;
+    };
 
-  // meses do período
-  const months: string[] = [];
-  for (const d = new Date(start); d <= end; d.setMonth(d.getMonth()+1)) {
-    months.push(d.toISOString().slice(0,7));
-  }
-
-  // mapa de eventos (delta por dia)
-  const ev = new Map<string, number>();
-  const add = (day: string, delta: number) =>
-    ev.set(day, (ev.get(day) || 0) + delta);
-
-  // 1) transações reais dentro do período
-  for (const t of transacoes) {
-    const day = normDay(t.data_transacao);
-    if (!inRange(day)) continue;
-    const delta = t.tipo === "receita" ? Number(t.valor) : -Number(t.valor);
-    add(day, delta);
-  }
-
-  // 2) eventos sintéticos mensais (no período)
-  for (const m of months) {
-    const firstDay = `${m}-01`;
-
-    // renda fixa: só se não houver receita lançada no mês
-    const temReceitaNoMes = transacoes.some(
-      (t) => t.tipo === "receita" && ym(t.data_transacao) === m
-    );
-    if (!temReceitaNoMes && (usuario?.renda_fixa ?? 0) > 0) {
-      add(firstDay, Number(usuario!.renda_fixa));
+    const months: string[] = [];
+    for (const d = new Date(start); d <= end; d.setMonth(d.getMonth() + 1)) {
+      months.push(d.toISOString().slice(0, 7));
     }
 
-    // gastos fixos: sempre subtrai, se houver valor
-    if ((usuario?.gastos_fixos ?? 0) > 0) {
-      add(firstDay, -Number(usuario!.gastos_fixos));
-    }
-  }
+    const ev = new Map<string, number>();
+    const add = (day: string, delta: number) =>
+      ev.set(day, (ev.get(day) || 0) + delta);
 
-  // acumula a partir de 0
-  const days = Array.from(ev.keys()).sort();
-  let acc = 0;
-  return days.map((day) => {
-    acc += ev.get(day)!;
-    return { day, saldo: Math.round((acc + Number.EPSILON) * 100) / 100 };
-  });
-}, [transacoes, usuario?.renda_fixa, usuario?.gastos_fixos]);
+    for (const t of transacoes) {
+      const day = normDay(t.data_transacao);
+      if (!inRange(day)) continue;
+      const delta = t.tipo === "receita" ? Number(t.valor) : -Number(t.valor);
+      add(day, delta);
+    }
+
+    for (const m of months) {
+      const firstDay = `${m}-01`;
+      const temReceitaNoMes = transacoes.some(
+        (t) => t.tipo === "receita" && ym(t.data_transacao) === m
+      );
+      if (!temReceitaNoMes && (usuario?.renda_fixa ?? 0) > 0) {
+        add(firstDay, Number(usuario!.renda_fixa));
+      }
+      if ((usuario?.gastos_fixos ?? 0) > 0) {
+        add(firstDay, -Number(usuario!.gastos_fixos));
+      }
+    }
+
+    const days = Array.from(ev.keys()).sort();
+    let acc = 0;
+    return days.map((day) => {
+      acc += ev.get(day)!;
+      return { day, saldo: Math.round((acc + Number.EPSILON) * 100) / 100 };
+    });
+  }, [transacoes, usuario?.renda_fixa, usuario?.gastos_fixos]);
 
   // pizza por categoria (apenas DESPESAS DO MÊS ATUAL)
   const categoryData: PiePoint[] = useMemo(() => {
@@ -428,35 +517,41 @@ const saldoSeries: LinePoint[] = useMemo(() => {
     }));
   }, [despesas, nowMonth]);
 
+  // === paleta âmbar/caramelo expandida p/ até 9 categorias (sem repetir) ===
+  const pieColors = useMemo(
+    () =>
+      ["#fcd34d", "#fbbf24", "#f59e0b", "#d97706", "#b45309", "#92400e", "#78350f", "#a16207", "#713f12"]
+        .slice(0, Math.max(0, categoryData.length)),
+    [categoryData.length]
+  );
+
   // barras por mês (últimos 6) com base nas transações
-const monthlyData: MonthlyPoint[] = useMemo(() => {
-  // últimos 6 meses como YYYY-MM, mesmo sem transações
-  const months: string[] = Array.from({ length: 6 }, (_, i) => {
-    const d = new Date();
-    d.setMonth(d.getMonth() - (5 - i));  // do mais antigo ao mais recente
-    return d.toISOString().slice(0, 7);  // YYYY-MM
-  });
+  const monthlyData: MonthlyPoint[] = useMemo(() => {
+    const months: string[] = Array.from({ length: 6 }, (_, i) => {
+      const d = new Date();
+      d.setMonth(d.getMonth() - (5 - i));
+      return d.toISOString().slice(0, 7);
+    });
 
-  return months.map((k) => {
-    const exp = transacoes
-      .filter(t => t.tipo === "despesa" && t.data_transacao.startsWith(k))
-      .reduce((a, t) => a + Number(t.valor), 0);
+    return months.map((k) => {
+      const exp = transacoes
+        .filter((t) => t.tipo === "despesa" && t.data_transacao.startsWith(k))
+        .reduce((a, t) => a + Number(t.valor), 0);
 
-    const incFromTx = transacoes
-      .filter(t => t.tipo === "receita" && t.data_transacao.startsWith(k))
-      .reduce((a, t) => a + Number(t.valor), 0);
+      const incFromTx = transacoes
+        .filter((t) => t.tipo === "receita" && t.data_transacao.startsWith(k))
+        .reduce((a, t) => a + Number(t.valor), 0);
 
-    // regra: se não houver receitas registradas no mês, usa renda fixa como renda do mês
-    const inc = incFromTx
 
-    return {
-      month: k,
-      expenses: Math.round((exp + Number.EPSILON) * 100) / 100,
-      income:   Math.round((inc + Number.EPSILON) * 100) / 100,
-    };
-  });
-}, [transacoes, usuario?.renda_fixa]);
+      const inc = incFromTx
 
+      return {
+        month: k,
+        expenses: Math.round((exp + Number.EPSILON) * 100) / 100,
+        income: Math.round((inc + Number.EPSILON) * 100) / 100,
+      };
+    });
+  }, [transacoes, usuario?.renda_fixa]);
 
   const chartConfig = {
     expenses: { label: "Gastos", color: "hsl(var(--chart-1))" },
@@ -465,15 +560,13 @@ const monthlyData: MonthlyPoint[] = useMemo(() => {
     amount: { label: "Valor", color: "hsl(var(--chart-4))" },
   };
 
-  if (loading) return <div className="p-6 text-slate-200">Carregando dados...</div>;
+  if (loading) return <div className="p-6 text-slate-2 00">Carregando dados...</div>;
   if (error) return <div className="p-6 text-red-400">Erro: {error}</div>;
 
-  // sugestão simples contextual
   const suggestion = (() => {
     if (despesasMes > rendaFixa * 0.6) {
       return {
-        text:
-          "Seus gastos deste mês já superam 60% da renda. Avalie reduzir despesas.",
+        text: "Seus gastos deste mês já superam 60% da renda. Avalie reduzir despesas.",
         icon: <AlertTriangle className="w-5 h-5 text-yellow-500" />,
       };
     }
@@ -482,8 +575,54 @@ const monthlyData: MonthlyPoint[] = useMemo(() => {
       icon: <CheckCircle className="w-5 h-5 text-emerald-500" />,
     };
   })();
+  const toISODate = (s: string) => {
+    if (!s) return s;
 
-  const pieColors = ["#fbbf24", "#f59e0b", "#d97706", "#b45309", "#92400e", "#78350f"];
+    if (s.includes('/')) {
+      const [dd, mm, yyyy] = s.split('/');
+      return `${yyyy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`;
+    }
+    return s;
+  };
+
+  function openEdit(t: Transacao) {
+    setEditing(t);
+    setFormDescricao(t.descricao || "");
+    setFormValor(String(t.valor));
+    const todayISO = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+    setFormData(toISODate(t.data_transacao) || todayISO);
+    setFormCategoria(t.id_categoria);
+    setEditOpen(true);
+  }
+
+  async function handleSave() {
+    if (!editing) return;
+
+    const patch = {
+      id_usuario: editing.id_usuario,
+      tipo: editing.tipo,
+      descricao: formDescricao,
+      valor: formValor,
+      data_transacao: formData,
+      id_categoria: formCategoria ?? editing.id_categoria,
+    };
+
+    async function handleDelete() {
+      if (!editing) return;
+      const ok = window.confirm("Tem certeza que deseja excluir esta transação?");
+      if (!ok) return;
+
+      await deleteTransacao(editing.id_transacao);
+      setEditOpen(false);
+      setEditing(null);
+      await fetchAll();
+    }
+
+    await putTransacao(editing.id_transacao, patch);
+    setEditOpen(false);
+    setEditing(null);
+    await fetchAll();
+  }
 
   return (
     <div className="space-y-6">
@@ -493,16 +632,13 @@ const monthlyData: MonthlyPoint[] = useMemo(() => {
           <CardHeader>
             <CardTitle className="text-white flex items-center gap-2">
               <TrendingUp className="w-5 h-5 text-emerald-500" />
-              {/* >>> TROCA: título do card */}
               Saldo do mês
             </CardTitle>
             <CardDescription className="text-slate-400">
-              {/* >>> TROCA: descrição do card */}
               O que sobrou este mês: receitas − despesas
             </CardDescription>
           </CardHeader>
           <CardContent className="text-2xl font-semibold text-emerald-400">
-            {/* >>> TROCA: valor exibido */}
             {fmtBRL(saldoMes)}
           </CardContent>
         </Card>
@@ -547,7 +683,6 @@ const monthlyData: MonthlyPoint[] = useMemo(() => {
             <div className="text-slate-300">Despesas: {fmtBRL(totalDespesas)}</div>
           </CardContent>
         </Card>
-        
       </div>
 
       {/* Dica */}
@@ -574,49 +709,52 @@ const monthlyData: MonthlyPoint[] = useMemo(() => {
             </CardDescription>
           </CardHeader>
           <CardContent className="min-w-0">
-            <ChartContainer ref={containerRef} config={chartConfig} className="w-full aspect-[4/3] lg:aspect-video">
-                <PieChart margin={{ top: 8, right: 12, bottom: 8, left: 12 }}>
-                  <Pie
-                    cx="50%"
-                    cy="50%"
-                    outerRadius={(() => {
-                     const base = Math.floor(chartW / (isDesktop ? 5 : isTablet ? 3.6 : 5));
-                     const maxR = isDesktop ? 84 : isTablet ? 128 : 84; 
-                     return Math.max(56, Math.min(maxR, base));
-                      })()}
-                    data={categoryData}
-                    dataKey="amount"
-                    nameKey="category"
-                    label={renderSmartLabel}
-                    labelLine={false}
-                    activeIndex={activeIndex ?? undefined}
-                    isAnimationActive={false}
-                    onMouseEnter={activate}
-                    onMouseLeave={deactivate}
-                    onClick={activate}
-                    onTouchStart={activate}
-                    onTouchEnd={deactivate}
-                    onPointerDown={activate}
-                    onPointerLeave={deactivate}
-                  >
-                    {categoryData.map((_, i) => (
-                      <Cell 
-                      key={i} 
-                      fill={pieColors[i % pieColors.length]} 
-                      onMouseEnter={() => setActiveIndex(i)} 
+            {/* mantém seu aspect e resize logic */}
+            <ChartContainer ref={containerRef} config={chartConfig} className="w-full aspect-[4/3] lg:aspect-[4/3] min-h-[520px] sm:min-h-[560px] lg:min-h-[600px]">
+              <PieChart margin={{ top: 8, right: 12, bottom: 8, left: 12 }}>
+                <Pie
+                  cx="50%"
+                  cy="50%"
+                  outerRadius={(() => {
+                    const shortSide = Math.max(1, Math.min(chartW || 0, chartH || chartW || 0));
+                    const base = isDesktop ? shortSide * 0.52 : isTablet ? shortSide * 0.42 : shortSide * 0.40;
+                    const maxR = isDesktop ? 240 : isTablet ? 140 : 110;   // ↑ maior só no desktop
+                    const minR = isDesktop ? 96 : 64;
+                    return Math.max(minR, Math.min(Math.floor(base), maxR));
+                  })()}
+                  data={categoryData}
+                  dataKey="amount"
+                  nameKey="category"
+                  label={renderSmartLabel}
+                  labelLine={false}
+                  activeIndex={activeIndex ?? undefined}
+                  isAnimationActive={false}
+                  onMouseEnter={activate}
+                  onMouseLeave={deactivate}
+                  onClick={activate}
+                  onTouchStart={activate}
+                  onTouchEnd={deactivate}
+                  onPointerDown={activate}
+                  onPointerLeave={deactivate}
+                >
+                  {categoryData.map((_, i) => (
+                    <Cell
+                      key={i}
+                      fill={pieColors[i]}
+                      onMouseEnter={() => setActiveIndex(i)}
                       onMouseLeave={deactivate}
                       onClick={() => setActiveIndex(i)}
                       onTouchStart={() => setActiveIndex(i)}
                       onTouchEnd={deactivate}
-                      />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    formatter={(v: any, n) => [fmtBRL(Number(v)), String(n)]}
-                    cursor={{ fill: "transparent" }}
-                    wrapperStyle={{ pointerEvents: "none" }}
-                  />
-                </PieChart>
+                    />
+                  ))}
+                </Pie>
+                <Tooltip
+                  formatter={(v: any, n) => [fmtBRL(Number(v)), String(n)]}
+                  cursor={{ fill: "transparent" }}
+                  wrapperStyle={{ pointerEvents: "none" }}
+                />
+              </PieChart>
             </ChartContainer>
           </CardContent>
         </Card>
@@ -629,149 +767,241 @@ const monthlyData: MonthlyPoint[] = useMemo(() => {
               Receitas vs Despesas (últimos 6 meses)
             </CardDescription>
           </CardHeader>
-         <CardContent className="min-w-0" onClick={() => setActiveMonthIdx(null)} >
-        <div onClick={(e) => e.stopPropagation()}>
-        <ChartContainer config={chartConfig} className="w-full aspect-[4/3] md:aspect-video">
-          <BarChart
-            data={monthlyData}
-            margin={{ top: 8, right: 12, bottom: isMobile ? 16 : 8, left: 12 }}
-            barCategoryGap={isMobile ? "45%" : "25%"}
-            barGap={isMobile ? 16 : 14}
-         >
-      <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
-      <XAxis
-        dataKey="month"
-        tick={{ fill: "#94a3b8" }}
-        tickFormatter={fmtMes}
-        angle={isMobile ? -30 : 0}
-        dx={isMobile ? -6 : 0}
-        dy={isMobile ? 10 : 0}
-        height={isMobile ? 40 : undefined}
-        interval={0}
-      />
-      <YAxis tick={{ fill: "#94a3b8" }} />
-      <Tooltip
-        active={activeMonthIdx !== null}
-        label={activeMonthIdx !== null ? monthlyData[activeMonthIdx].month : undefined}
-        payload={
-          activeMonthIdx !== null
-          ? [
-              { name: "Receitas",  value: monthlyData[activeMonthIdx].income,   color: "#10b981" },
-              { name: "Despesas", value: monthlyData[activeMonthIdx].expenses, color: "#ef4444" },
-            ]
-             : undefined
-            }
-        labelFormatter={(v) => `Mês: ${fmtMes(String(v))}`}
-        formatter={(value, name) => [fmtBRL(Number(value)), name]}
-        wrapperStyle={{ pointerEvents: "none" }}
-        cursor={{ fill: "transparent" }}
-      />
+          <CardContent className="min-w-0" onClick={() => setActiveMonthIdx(null)} >
+            <div onClick={(e) => e.stopPropagation()}>
+              <ChartContainer config={chartConfig} className="w-full aspect-[4/3] md:aspect-video">
+                <BarChart
+                  data={monthlyData}
+                  margin={{ top: 8, right: 12, bottom: isMobile ? 16 : 8, left: 12 }}
+                  barCategoryGap={isMobile ? "45%" : "25%"}
+                  barGap={isMobile ? 16 : 14}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
+                  <XAxis
+                    dataKey="month"
+                    tick={{ fill: "#94a3b8" }}
+                    tickFormatter={fmtMes}
+                    angle={isMobile ? -30 : 0}
+                    dx={isMobile ? -6 : 0}
+                    dy={isMobile ? 10 : 0}
+                    height={isMobile ? 40 : undefined}
+                    interval={0}
+                  />
+                  <YAxis tick={{ fill: "#94a3b8" }} />
+                  <Tooltip
+                    active={activeMonthIdx !== null}
+                    label={activeMonthIdx !== null ? monthlyData[activeMonthIdx].month : undefined}
+                    payload={
+                      activeMonthIdx !== null
+                        ? [
+                          { name: "Receitas", value: monthlyData[activeMonthIdx].income, color: "#10b981" },
+                          { name: "Despesas", value: monthlyData[activeMonthIdx].expenses, color: "#ef4444" },
+                        ]
+                        : undefined
+                    }
+                    labelFormatter={(v) => `Mês: ${fmtMes(String(v))}`}
+                    formatter={(value, name) => [fmtBRL(Number(value)), name]}
+                    wrapperStyle={{ pointerEvents: "none" }}
+                    cursor={{ fill: "transparent" }}
+                  />
 
-      {/* Renda */}
-      <Bar
-        dataKey="income"
-        name="Receitas"
-        fill="#10b981"
-        radius={4}
-        isAnimationActive={false}
-        barSize={isMobile ? 18 : 28}
-        onMouseLeave={!isMobile ? deactivateBar : undefined}
-      >
-        {monthlyData.map((_, i) => (
-          <Cell
-            key={`inc-${i}`}
-            opacity={activeMonthIdx === null || activeMonthIdx === i ? 1 : 0.35}
-            onMouseEnter={!isMobile ? () => setActiveMonthIdx(i) : undefined}
-            onClick={() => setActiveMonthIdx(prev => (prev === i ? null : i))}
-            onTouchStart={() => setActiveMonthIdx(prev => (prev === i ? null : i))}
-          />
-        ))}
-      </Bar>
+                  {/* Renda */}
+                  <Bar
+                    dataKey="income"
+                    name="Receitas"
+                    fill="#10b981"
+                    radius={4}
+                    isAnimationActive={false}
+                    barSize={isMobile ? 18 : 28}
+                    onMouseLeave={!isMobile ? deactivateBar : undefined}
+                  >
+                    {monthlyData.map((_, i) => (
+                      <Cell
+                        key={`inc-${i}`}
+                        opacity={activeMonthIdx === null || activeMonthIdx === i ? 1 : 0.35}
+                        onMouseEnter={!isMobile ? () => setActiveMonthIdx(i) : undefined}
+                        onClick={() => setActiveMonthIdx(prev => (prev === i ? null : i))}
+                        onTouchStart={() => setActiveMonthIdx(prev => (prev === i ? null : i))}
+                      />
+                    ))}
+                  </Bar>
 
-      {/* Gastos */}
-      <Bar
-        dataKey="expenses"
-        name="Despesas"
-        fill="#ef4444"
-        radius={4}
-        isAnimationActive={false}
-        barSize={isMobile ? 18 : 28}
-        onMouseLeave={!isMobile ? deactivateBar : undefined}
-      >
-        {monthlyData.map((_, i) => (
-          <Cell
-            key={`exp-${i}`}
-            opacity={activeMonthIdx === null || activeMonthIdx === i ? 1 : 0.35}
-            onMouseEnter={!isMobile ? () => setActiveMonthIdx(i) : undefined}
-            onClick={() => setActiveMonthIdx(prev => (prev === i ? null : i))}
-            onTouchStart={() => setActiveMonthIdx(prev => (prev === i ? null : i))}
-          />
-        ))}
-      </Bar>
-    </BarChart>
-  </ChartContainer>
-  </div>
-</CardContent>
-
+                  {/* Gastos */}
+                  <Bar
+                    dataKey="expenses"
+                    name="Despesas"
+                    fill="#ef4444"
+                    radius={4}
+                    isAnimationActive={false}
+                    barSize={isMobile ? 18 : 28}
+                    onMouseLeave={!isMobile ? deactivateBar : undefined}
+                  >
+                    {monthlyData.map((_, i) => (
+                      <Cell
+                        key={`exp-${i}`}
+                        opacity={activeMonthIdx === null || activeMonthIdx === i ? 1 : 0.35}
+                        onMouseEnter={!isMobile ? () => setActiveMonthIdx(i) : undefined}
+                        onClick={() => setActiveMonthIdx(prev => (prev === i ? null : i))}
+                        onTouchStart={() => setActiveMonthIdx(prev => (prev === i ? null : i))}
+                      />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ChartContainer>
+            </div>
+          </CardContent>
         </Card>
       </div>
 
       {/* Saldo + últimas despesas */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-
         <Card className="md:col-span-2 bg-slate-800 border border-slate-700 shadow-sm">
           <CardHeader>
-            <CardTitle className="text-white">Últimas Despesas</CardTitle>
+            <CardTitle className="text-white">Últimos lançamentos</CardTitle>
             <CardDescription className="text-slate-400">
-              Seus lançamentos mais recentes (mês e históricos)
+              Seus lançamentos deste mês (despesas e receitas)
             </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {despesas.length === 0 && (
-                <div className="text-slate-400">Sem despesas registradas.</div>
+              {ultimosLancamentos.length === 0 && (
+                <div className="text-slate-400">Sem lançamentos registrados.</div>
               )}
-              {[...despesas]
-                .sort((a, b) => b.data_transacao.localeCompare(a.data_transacao))
-                .slice(0, 6)
-                .map((t) => (
-                  <div
-                    key={t.id_transacao}
-                    className="flex items-center justify-between rounded-lg bg-slate-900/60 px-3 py-2"
-                  >
-                    <div className="min-w-0">
-                      <div className="truncate text-slate-100">
-                        {t.descricao || "Despesa"}
+
+              {[...ultimosLancamentos]
+                .map((t) => {
+                  const isReceita = t.tipo === "receita";
+                  const valorClass = isReceita ? "text-emerald-300" : "text-rose-300";
+                  const rotuloPadrao = isReceita ? "Receita" : "Despesa";
+                  return (
+                    <div
+                      key={t.id_transacao}
+                      className="flex items-center justify-between rounded-lg bg-slate-900/60 px-3 py-2"
+                    >
+                      <div className="min-w-0">
+                        <div className="truncate text-slate-100">
+                          {t.descricao || rotuloPadrao}
+                        </div>
+                        <div className="text-xs text-slate-400">
+                          {fmtDia(t.data_transacao)} •{" "}
+                          {categoriasDict[t.id_categoria] ?? `Categoria #${t.id_categoria}`}
+                        </div>
                       </div>
-                      <div className="text-xs text-slate-400">
-                        {fmtDia(t.data_transacao)} • {categoriasDict[t.id_categoria] ?? `Categoria #${t.id_categoria}`}
+
+                      <div className="flex items-center gap-2">
+                        <div className={`font-semibold ${valorClass}`}>
+                          {fmtBRL(Number(t.valor))}
+                        </div>
+
+                        <button
+                          type="button"
+                          className="p-1 rounded-md hover:bg-slate-800/60 focus:outline-none focus:ring-2 focus:ring-amber-400/40"
+                          onClick={() => openEdit(t)}
+                          title="Editar lançamento"
+                          aria-label="Editar lançamento"
+                        >
+                          <Pencil className="w-4 h-4 text-slate-300" />
+                        </button>
+
                       </div>
                     </div>
-                    <div className="font-semibold text-rose-300">
-                      {fmtBRL(Number(t.valor))}
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
+
             </div>
           </CardContent>
         </Card>
-        {/* ==== RODAPÉ DA ABA PAINEL ==== */}
-        <div className="md:col-span-2 w-full flex justify-center">
-      <FaleConosco
-        companyName="FINTY"
-        year={2025}
-        cnpj="00.000.000/0000-00"
-        contactTitle="Fale Conosco"
-        contactName="Finty Análise"
-        email="finty.adm@gmail.com"
-        className="mt-8"
-      />
-    </div>
-  </div> {/* fecha o CONTAINER mx-auto px-4 */}
-      </div>
+        <Dialog open={editOpen} onOpenChange={setEditOpen}>
+          <DialogContent className="bg-slate-900 border border-slate-700">
+            <DialogHeader>
+              <DialogTitle className="text-white">
+                Editar {editing?.tipo === "receita" ? "Receita" : "Despesa"}
+              </DialogTitle>
+            </DialogHeader>
 
-    
-    
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label className="text-slate-300">Descrição</Label>
+                <Input
+                  value={formDescricao}
+                  onChange={(e) => setFormDescricao(e.target.value)}
+                  className="bg-slate-800 border-slate-700 text-white"
+                  placeholder={editing?.tipo === "receita" ? "Ex.: Salário" : "Ex.: Supermercado"}
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-slate-300">Valor</Label>
+                  <Input
+                    value={formValor}
+                    onChange={(e) => setFormValor(e.target.value)}
+                    className="bg-slate-800 border-slate-700 text-white"
+                    placeholder="Ex.: 150,00"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-slate-300">Data</Label>
+                  <Input
+                    type="date"
+                    value={formData}
+                    onChange={(e) => setFormData(e.target.value)}
+                    className="bg-slate-800 border-slate-700 text-white"
+                  />
+
+
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-slate-300">Categoria</Label>
+                <Select
+                  value={String(formCategoria ?? "")}
+                  onValueChange={(v) => setFormCategoria(Number(v))}
+                >
+                  <SelectTrigger className="bg-slate-800 border-slate-700 text-white">
+                    <SelectValue placeholder="Selecione a categoria" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-slate-900 text-white border-slate-700">
+                    {(categoriasList || [])
+                      .filter((c: any) => c.tipo === editing?.tipo) // mostra apenas do mesmo tipo
+                      .map((c: any) => (
+                        <SelectItem key={c.id_categoria} value={String(c.id_categoria)}>
+                          {c.nome_categoria}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <DialogFooter className="mt-4">
+              <Button variant="ghost" onClick={() => setEditOpen(false)} className="text-slate-300">
+                Cancelar
+              </Button>
+              <Button onClick={handleSave} className="bg-amber-500 hover:bg-amber-600 text-slate-900">
+                Salvar
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+
+
+        <div className="md:col-span-2 w-full flex justify-center">
+          <FaleConosco
+            companyName="FINTY"
+            year={2025}
+            cnpj="00.000.000/0000-00"
+            contactTitle="Fale Conosco"
+            contactName="Finty Análise"
+            email="finty.adm@gmail.com"
+            className="mt-8"
+          />
+        </div>
+      </div>
+    </div>
   );
 };
 
