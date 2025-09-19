@@ -25,17 +25,8 @@ import {
   TrendingDown,
   AlertTriangle,
   CheckCircle,
-<<<<<<< HEAD
   Pencil,
-=======
-  MoreVertical, 
-  Pencil,       
-  Trash2,       
-  X,            
-  Check,        
->>>>>>> 1f9c109 (limita “Últimas Transações” ao mês atual e ordena por data decrescente)
 } from "lucide-react";
-
 import {
   getTransacoes,
   getUsuario,
@@ -58,23 +49,11 @@ const fmtBRL = (n: number) =>
     maximumFractionDigits: 2,
   });
 
-
 const fmtDia = (s: string) => {
-<<<<<<< HEAD
   const d = new Date(s);
   return Number.isNaN(d.getTime()) ? s : d.toLocaleDateString("pt-BR");
 };
 const fmtMes = (s: string) => s.replace("-", "/");
-=======
-  const dateOnly = String(s).trim().slice(0, 10); 
-  const [yy, mm, dd] = dateOnly.split("-");
-  if (!yy || !mm || !dd) return s; 
-  return `${dd}/${mm}/${yy}`;
-};
-
-
-const fmtMes = (s: string) => s.replace("-", "/"); // "2025-09" -> "2025/09"
->>>>>>> 1f9c109 (limita “Últimas Transações” ao mês atual e ordena por data decrescente)
 
 export const DashboardView = () => {
   const [loading, setLoading] = useState(true);
@@ -417,27 +396,10 @@ const renderSmartLabel = (props: any) => {
   const rendaFixa = Number(usuario?.renda_fixa ?? 0);
   const gastosFixos = Number(usuario?.gastos_fixos ?? 0);
 
-   // Saldo do mês
+  // Saldo do mês
   const saldoMes = rendaFixa + receitasMes - (gastosFixos + despesasMes);
-  
-const transacoesMes = useMemo(() => {
-  const now = new Date();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);     
-  const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
 
-  const parseDay = (s: string) => {
-   
-    const day = String(s).trim().slice(0, 10);
-    const d = new Date(day);
-    return Number.isNaN(d.getTime()) ? null : d;
-  };
-
-  return transacoes.filter((t) => {
-    const d = parseDay(t.data_transacao);
-    return d !== null && d >= monthStart && d < nextMonthStart;
-  });
-}, [transacoes]);
-
+  // totais absolutos
   const totalReceitas = useMemo(
     () => receitas.reduce((acc, t) => acc + Number(t.valor), 0),
     [receitas]
@@ -596,7 +558,7 @@ const transacoesMes = useMemo(() => {
             {fmtBRL(saldoMes)}
           </CardContent>
         </Card>
-        
+
         <Card className="bg-slate-800 border-slate-700">
           <CardHeader>
             <CardTitle className="text-white flex items-center gap-2">
@@ -805,45 +767,32 @@ const transacoesMes = useMemo(() => {
         </Card>
       </div>
 
-            {/* Saldo + últimas transações */}
+      {/* Saldo + últimas despesas */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <Card className="md:col-span-2 bg-slate-800 border border-slate-700 shadow-sm">
           <CardHeader>
-            <CardTitle className="text-white">Últimas Transações</CardTitle>
+            <CardTitle className="text-white">Últimas Despesas</CardTitle>
             <CardDescription className="text-slate-400">
-              Seus lançamentos mais recentes (apenas esse mês)
+              Seus lançamentos mais recentes (mês e históricos)
             </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {transacoesMes.length === 0 && (
-                <div className="text-slate-400">Sem transações neste mês.</div>
+              {despesas.length === 0 && (
+                <div className="text-slate-400">Sem despesas registradas.</div>
               )}
-
-              {[...transacoesMes]
-                .sort((a, b) => {
-                  const tb = new Date(String(b.data_transacao).trim().slice(0, 10)).getTime();
-                  const ta = new Date(String(a.data_transacao).trim().slice(0, 10)).getTime();
-                  return tb - ta; // mais recente primeiro
-                })
-                .map((t) => {
-                  const isDespesa = t.tipo === "despesa";
-                  const valorClass = isDespesa ? "text-rose-300" : "text-emerald-400";
-                  return (
-                    <div
-                      key={t.id_transacao}
-                      className="flex items-center justify-between rounded-lg bg-slate-900/60 px-3 py-2"
-                    >
-                      <div className="min-w-0">
-                        <div className="truncate text-slate-100">
-                          {t.descricao || (isDespesa ? "Despesa" : "Receita")}
-                        </div>
-                        <div className="text-xs text-slate-400">
-                          {fmtDia(String(t.data_transacao).slice(0, 10))} •{" "}
-                          {categoriasDict[t.id_categoria] ?? `Categoria #${t.id_categoria}`}
-                        </div>
+              {[...despesas]
+                .sort((a, b) => b.data_transacao.localeCompare(a.data_transacao))
+                .slice(0, 6)
+                .map((t) => (
+                  <div
+                    key={t.id_transacao}
+                    className="flex items-center justify-between rounded-lg bg-slate-900/60 px-3 py-2"
+                  >
+                    <div className="min-w-0">
+                      <div className="truncate text-slate-100">
+                        {t.descricao || "Despesa"}
                       </div>
-<<<<<<< HEAD
                       <div className="text-xs text-slate-400">
                         {fmtDia(t.data_transacao)} •{" "}
                         {categoriasDict[t.id_categoria] ?? `Categoria #${t.id_categoria}`}
@@ -868,23 +817,11 @@ const transacoesMes = useMemo(() => {
 </div>
                   </div>
                 ))}
-=======
-                      <div className={`font-semibold ${valorClass}`}>
-                        {fmtBRL(Number(t.valor))}
-                      </div>
-                    </div>
-                  );
-                })}
->>>>>>> 1f9c109 (limita “Últimas Transações” ao mês atual e ordena por data decrescente)
             </div>
           </CardContent>
         </Card>
 
-<<<<<<< HEAD
         {/* ==== RODAPÉ DA ABA PAINEL ==== */}
-=======
-                     {/* ==== RODAPÉ DA ABA PAINEL ==== */}
->>>>>>> 1f9c109 (limita “Últimas Transações” ao mês atual e ordena por data decrescente)
         <div className="md:col-span-2 w-full flex justify-center">
           <FaleConosco
             companyName="FINTY"
@@ -895,15 +832,9 @@ const transacoesMes = useMemo(() => {
             email="finty.adm@gmail.com"
             className="mt-8"
           />
-<<<<<<< HEAD
         </div>
       </div>
     </div>
-=======
-        </div>       
-      </div>          
-    </div>          
->>>>>>> 1f9c109 (limita “Últimas Transações” ao mês atual e ordena por data decrescente)
   );
 };
 
