@@ -30,6 +30,7 @@ import {
   getTransacoes,
   getUsuario,
   getCategorias,
+  postGarantirMes,
   type Transacao,
   type Usuario,
 } from "@/lib/api";
@@ -265,6 +266,11 @@ if (chartW) {
   const fetchAll = async () => {
     setLoading(true);
     try {
+      const ym = new Date().toISOString().slice(0, 7); // 'YYYY-MM'
+      try {
+        await postGarantirMes(ym); // idempotente
+      } catch {}
+
       const [u, t, cats] = await Promise.all([
         getUsuario(idUsuario),
         getTransacoes(idUsuario),
@@ -328,8 +334,8 @@ if (chartW) {
   const rendaFixa = Number(usuario?.renda_fixa ?? 0);
   const gastosFixos = Number(usuario?.gastos_fixos ?? 0);
 
-  // >>> TROCA: Saldo do mês = (renda_fixa + receitasMes) − (gastos_fixos + despesasMes)
-  const saldoMes = (rendaFixa + receitasMes) - (gastosFixos + despesasMes);
+  // Saldo do mes
+  const saldoMes = receitasMes - despesasMes;
 
   // totais absolutos (todas as datas) — ainda usados em gráficos de evolução/saldo
   const totalReceitas = useMemo(
@@ -441,7 +447,7 @@ const monthlyData: MonthlyPoint[] = useMemo(() => {
       .reduce((a, t) => a + Number(t.valor), 0);
 
     // regra: se não houver receitas registradas no mês, usa renda fixa como renda do mês
-    const inc = incFromTx > 0 ? incFromTx : Number(usuario?.renda_fixa ?? 0);
+    const inc = incFromTx
 
     return {
       month: k,
@@ -467,7 +473,7 @@ const monthlyData: MonthlyPoint[] = useMemo(() => {
     if (despesasMes > rendaFixa * 0.6) {
       return {
         text:
-          "Seus gastos deste mês já superam 60% da renda. Avalie reduzir despesas variáveis.",
+          "Seus gastos deste mês já superam 60% da renda. Avalie reduzir despesas.",
         icon: <AlertTriangle className="w-5 h-5 text-yellow-500" />,
       };
     }
@@ -620,7 +626,7 @@ const monthlyData: MonthlyPoint[] = useMemo(() => {
           <CardHeader>
             <CardTitle className="text-white">Evolução Mensal</CardTitle>
             <CardDescription className="text-slate-400">
-              Renda vs Gastos (últimos 6 meses)
+              Receitas vs Despesas (últimos 6 meses)
             </CardDescription>
           </CardHeader>
          <CardContent className="min-w-0" onClick={() => setActiveMonthIdx(null)} >
@@ -650,8 +656,8 @@ const monthlyData: MonthlyPoint[] = useMemo(() => {
         payload={
           activeMonthIdx !== null
           ? [
-              { name: "Renda",  value: monthlyData[activeMonthIdx].income,   color: "#10b981" },
-              { name: "Gastos", value: monthlyData[activeMonthIdx].expenses, color: "#ef4444" },
+              { name: "Receitas",  value: monthlyData[activeMonthIdx].income,   color: "#10b981" },
+              { name: "Despesas", value: monthlyData[activeMonthIdx].expenses, color: "#ef4444" },
             ]
              : undefined
             }
@@ -664,7 +670,7 @@ const monthlyData: MonthlyPoint[] = useMemo(() => {
       {/* Renda */}
       <Bar
         dataKey="income"
-        name="Renda"
+        name="Receitas"
         fill="#10b981"
         radius={4}
         isAnimationActive={false}
@@ -685,7 +691,7 @@ const monthlyData: MonthlyPoint[] = useMemo(() => {
       {/* Gastos */}
       <Bar
         dataKey="expenses"
-        name="Gastos"
+        name="Despesas"
         fill="#ef4444"
         radius={4}
         isAnimationActive={false}

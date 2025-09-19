@@ -27,6 +27,8 @@ export const AuthForm = ({ onLogin }: AuthFormProps) => {
   const [sending, setSending] = useState(false);
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [loggingIn, setLoggingIn] = useState(false);
+  const [payday, setPayday] = useState<number | undefined>(undefined);
+  const [currentBalance, setCurrentBalance] = useState<number | undefined>(undefined);
 
   useEffect(() => {
     const url = new URL(window.location.href);
@@ -64,7 +66,7 @@ export const AuthForm = ({ onLogin }: AuthFormProps) => {
         setShowResend(true);
         toast({
           title: "E-mail não verificado",
-          description: "Confirme o e-mail que enviamos. Se não recebeu, solicite um novo envio abaixo.",
+          description: "Confirme o e-mail que enviamos (verifique a caixa de Spam). Se não recebeu, solicite um novo envio abaixo.",
           variant: "destructive",
         });
       } else {
@@ -85,7 +87,7 @@ export const AuthForm = ({ onLogin }: AuthFormProps) => {
       await resendVerificationByEmail(email.trim());
       toast({
         title: "Verificação reenviada",
-        description: "Se existir uma conta com este e-mail, um novo link foi enviado.",
+        description: "Se existir uma conta com este e-mail, um novo link foi enviado (verifique a caixa de Spam).",
       });
     } catch (e: any) {
       toast({
@@ -142,6 +144,8 @@ export const AuthForm = ({ onLogin }: AuthFormProps) => {
         email,
         renda_fixa: Number(monthlyIncome ?? 0),
         gastos_fixos: Number(fixedExpenses ?? 0),
+        dia_pagamento: payday,
+        saldo_atual: Number(currentBalance ?? 0),
         meta_economia: Number(String(savingsGoal ?? 0).replace(',', '.')),
         senha: password || "",
         confirm_senha: confirmPassword || ""
@@ -156,7 +160,7 @@ export const AuthForm = ({ onLogin }: AuthFormProps) => {
 
       toast({
         title: "Conta criada!",
-        description: "Enviamos um e-mail de verificação. Confirme para fazer login.",
+        description: "Enviamos um e-mail de verificação. Confirme para fazer login (verifique a caixa de Spam).",
       });
     } catch (err: any) {
       console.error(err);
@@ -355,6 +359,9 @@ export const AuthForm = ({ onLogin }: AuthFormProps) => {
                         required
                         className="bg-slate-700 border-slate-600 text-white placeholder:text-slate-400"
                       />
+                      <p className="text-xs text-slate-400">
+                        Renda mensal = valor fixo (caso sua renda seja variável, deixe acima um valor aproximado ou deixe zerado e insira sua renda manualmente)
+                      </p>
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="fixed-expenses" className="text-white">Gastos Fixos Mensais</Label>
@@ -369,7 +376,38 @@ export const AuthForm = ({ onLogin }: AuthFormProps) => {
                         className="bg-slate-700 border-slate-600 text-white placeholder:text-slate-400"
                       />
                       <p className="text-xs text-slate-400">
-                        Ex: aluguel, condomínio, financiamentos, planos, etc.
+                        Ex: aluguel, condomínio, financiamentos, faculdade, etc.
+                      </p>
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="dia_pagamento">Dia do pagamento (1-30)</Label>
+                      <Input
+                        id="dia_pagamento"
+                        type="number"
+                        min={1}
+                        max={30}
+                        value={payday ?? ""}
+                        onChange={(e) => setPayday(Number(e.target.value))}
+                        placeholder="Escolha o dia do seu pagamento"
+                        className="bg-slate-700 border-slate-600 text-white placeholder:text-slate-400"
+                      />
+                      <p className="text-xs text-slate-400">
+                        Obs: caso receba por dia útil, selecione a data aproximada (para aqueles que deixarem a renda fixa em branco, selecionar a data acima como 1)
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="saldo_atual" className="text-white">Saldo disponível hoje</Label>
+                      <Input
+                        id="saldo_atual"
+                        type="number"
+                        step="0.01"
+                        placeholder="Digite seu saldo atual (R$)"
+                        value={currentBalance ?? ""}
+                        onChange={(e) => setCurrentBalance(Number(e.target.value))}
+                        className="bg-slate-700 border-slate-600 text-white placeholder:text-slate-400"
+                      />
+                      <p className="text-xs text-slate-400">
+                        Usaremos este valor como seu saldo inicial.
                       </p>
                     </div>
                     <div className="space-y-2">

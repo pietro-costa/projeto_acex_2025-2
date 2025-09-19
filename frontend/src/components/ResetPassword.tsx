@@ -40,7 +40,7 @@ export default function ResetPassword() {
     await forgotPassword(email.trim());
     toast({
       title:
-        "Verifique sua caixa de entrada: se o e-mail estiver cadastrado, enviaremos instruções de redefinição."
+        "Verifique seu email, se o mesmo estiver cadastrado, enviaremos instruções de redefinição (verifique a caixa de Spam)."
     });
   } catch (e: any) {
     console.error(e);

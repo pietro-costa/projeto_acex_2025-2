@@ -37,7 +37,6 @@ insert into categoria (nome_categoria, tipo) values
 ('Outros','despesa')
 on conflict do nothing;
 
-<<<<<<< HEAD
 alter table if exists usuario
   add column if not exists email_verificado boolean not null default false,
   add column if not exists token_verificacao text,
@@ -52,12 +51,18 @@ alter table if exists usuario
 
 create index if not exists idx_usuario_reset_token
   on usuario(reset_token);
-=======
 
-ALTER TABLE usuario
-  ADD COLUMN IF NOT EXISTS data_cadastro date NOT NULL DEFAULT CURRENT_DATE;
+alter table if exists categoria
+  add column if not exists sistema boolean not null default false;
 
+insert into categoria (nome_categoria, tipo, sistema) values
+('Ajuste Inicial','receita', true),
+('Salário','receita', true),
+('Gastos Fixos','despesa', true),
+('Saldo ao fim do mês anterior','receita', true),
+('Saldo ao fim do mês anterior','despesa', true)
+on conflict do nothing;
 
-UPDATE usuario
-SET data_cadastro = COALESCE(data_cadastro, CURRENT_DATE);
->>>>>>> 9d502db (correção do card 'conta criada há X dias' para usar data de cadastro real)
+alter table if exists usuario
+  add column if not exists saldo_inicial numeric(12,2) not null default 0,
+  add column if not exists dia_pagamento smallint check (dia_pagamento between 1 and 28);

@@ -9,4 +9,12 @@ export const pool = new Pool({
   password: process.env.PGPASSWORD,
   database: process.env.PGDATABASE,
   ssl: { rejectUnauthorized: false },
+  max: 15,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 10000,
+  keepAlive: true,
+});
+
+pool.on('error', (err) => {
+  console.error('[pg pool error]', err?.code || err?.message, err);
 });

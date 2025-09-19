@@ -22,7 +22,7 @@ export const Dashboard = () => {
         {currentView === "dashboard" && <DashboardView />}
         
         {/* Mostra a tela de ADICIONAR GASTO quando selecionado */}
-        {currentView === "add-expense" && <AddExpenseView setCurrentView={setCurrentView} />}
+        {currentView === "add-expense" && <AddExpenseView />}
         
         {/* Mostra a tela de ANÁLISES quando selecionado */}
         {currentView === "analytics" && <AdvancedAnalyticsView />}

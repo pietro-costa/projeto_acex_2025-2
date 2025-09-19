@@ -88,9 +88,9 @@ export type Usuario = {
   id_usuario: number;
   nome: string;
   email: string;
-  cpf?: string;
   renda_fixa: number;
   gastos_fixos: number;
+  dia_pagamento?: number;
   meta_economia?: number;
   data_criacao?: string;
 };
@@ -144,9 +144,11 @@ export type NewUsuario = {
   nome: string;
   email: string;
   senha: string;
-  confirm_senha?: string;
+  confirm_senha: string;
   renda_fixa: number | string;
   gastos_fixos: number | string;
+  dia_pagamento: number | string;
+  saldo_atual: number | string;
   meta_economia?: number | string;
 };
 
@@ -167,9 +169,9 @@ export function postLogin(body: { email: string; senha: string }) {
 
 export const patchUsuario = (
   id: number,
-  b: Partial<Usuario> & { senha?: string }
+  b: (Partial<Usuario> & { senha?: string }) & { dia_pagamento?: number }
 ) =>
-  api<{ ok: boolean }>(`/api/usuarios/${id}`, {
+  api<{ ok: boolean; user?: Usuario }>(`/api/usuarios/${id}`, {
     method: "PATCH",
     body: JSON.stringify(b),
   });
@@ -193,6 +195,13 @@ export function resetPassword(token: string, senha: string, confirm_senha: strin
   return api<{ ok: boolean }>('/api/password-reset', {
     method: 'POST',
     body: JSON.stringify({ token, senha, confirm_senha }),
+  });
+}
+
+export async function postGarantirMes(ym?: string) {
+  return api<{ ok: boolean; message?: string }>("/api/mensal/garantir", {
+    method: "POST",
+    body: JSON.stringify(ym ? { ym } : {}),
   });
 }
 

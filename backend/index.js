@@ -41,7 +41,7 @@ app.use(cors({
 app.use(express.json());
 
 const toNum = (v) =>
-  v === undefined || v === null || v === '' ? 0 : Number(String(v).replace(',','.'));
+  v === undefined || v === null || v === '' ? 0 : Number(String(v).replace(',', '.'));
 const isTipo = (s) => s === 'receita' || s === 'despesa';
 
 app.get('/api/health', async (_req, res) => {
@@ -56,7 +56,7 @@ app.get('/api/health', async (_req, res) => {
 app.post('/api/usuarios', async (req, res) => {
   const client = await pool.connect();
   try {
-    const { nome, email, senha, confirm_senha, renda_fixa = 0, gastos_fixos = 0, meta_economia = 0 } = req.body;
+    const { nome, email, senha, confirm_senha, renda_fixa = 0, gastos_fixos = 0, dia_pagamento = 0, saldo_atual = 0, meta_economia = 0 } = req.body;
 
     if (!nome || !email || !senha) {
       return res.status(400).json({ error: 'nome, email e senha são obrigatórios' });
@@ -72,23 +72,27 @@ app.post('/api/usuarios', async (req, res) => {
 
     const senha_hash = await bcrypt.hash(String(senha), 10);
 
+    const saldoInicial = Number(saldo_atual) > 0 ? Number(saldo_atual) : 0;
+
     const token = newVerificationToken();
     const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24); // 24hrs
 
     const insertSql = `
       INSERT INTO "usuario"
-        (nome, email, senha, renda_fixa, gastos_fixos, meta_economia, email_verificado, token_verificacao, token_expires_at)
+        (nome, email, senha, renda_fixa, gastos_fixos, dia_pagamento, saldo_inicial, meta_economia, email_verificado, token_verificacao, token_expires_at)
       VALUES
-        ($1,   $2,    $3,    $4,         $5,          $6,            FALSE,            $7,                $8)
+        ($1,$2,$3,$4,$5,$6,$7,$8,FALSE,$9,$10)
       RETURNING id_usuario, email
     `;
     const insertValues = [
       nome,
       email,
       senha_hash,
-      typeof toNum === 'function' ? toNum(renda_fixa)   : Number(renda_fixa || 0),
+      typeof toNum === 'function' ? toNum(renda_fixa) : Number(renda_fixa || 0),
       typeof toNum === 'function' ? toNum(gastos_fixos) : Number(gastos_fixos || 0),
-      typeof toNum === 'function' ? toNum(meta_economia): Number(meta_economia || 0),
+      typeof toNum === 'function' ? toNum(dia_pagamento) : Number(gastos_fixos || 0),
+      typeof toNum === 'function' ? toNum(saldo_atual) : Number(gastos_fixos || 0),
+      typeof toNum === 'function' ? toNum(meta_economia) : Number(meta_economia || 0),
       token,
       expiresAt,
     ];
@@ -103,6 +107,34 @@ app.post('/api/usuarios', async (req, res) => {
       id_usuario: user.id_usuario,
       message: 'Usuário criado. Enviamos um e-mail de verificação.',
     });
+
+    if (saldoInicial > 0) {
+      const { rows: cat } = await pool.query(`
+        select id_categoria from categoria
+        where nome_categoria = 'Ajuste Inicial' and tipo = 'receita' and sistema = true
+        limit 1
+      `);
+      if (cat.length) {
+        const ym = new Date().toISOString().slice(0, 7);
+        const { rows: exists } = await pool.query(`
+          select 1
+          from transacao t
+          join categoria c on c.id_categoria = t.id_categoria
+          where t.id_usuario = $1
+            and c.nome_categoria = 'Ajuste Inicial'
+            and c.tipo = 'receita'
+            and to_char(t.data_transacao,'YYYY-MM') = $2
+            and t.valor = $3
+          limit 1
+        `, [user.id_usuario, ym, saldoInicial]);
+        if (!exists.length) {
+          await pool.query(`
+            insert into transacao (id_usuario, id_categoria, descricao, valor, data_transacao, tipo)
+            values ($1, $2, $3, $4, CURRENT_DATE, 'receita')
+          `, [user.id_usuario, cat[0].id_categoria, 'Ajuste de saldo (onboarding)', saldoInicial]);
+        }
+      }
+    }
 
   } catch (e) {
     if (e.code === '23505') {
@@ -372,27 +404,49 @@ app.patch('/api/usuarios/:id', auth, sameUserParam('id'), async (req, res) => {
     const id = Number(req.params.id);
     if (!Number.isFinite(id)) return res.status(400).json({ error: 'id inválido' });
 
-    const { nome, renda_fixa, gastos_fixos, meta_economia, senha } = req.body ?? {};
+    const {
+      nome,
+      renda_fixa,
+      gastos_fixos,
+      meta_economia,
+      dia_pagamento,
+      senha
+    } = req.body ?? {};
+
+    const toNum = (v) => {
+      const n = Number(typeof v === 'string' ? v.replace?.(',', '.') : v);
+      return Number.isFinite(n) ? n : 0;
+    };
 
     const sets = [];
-    const vals = [id];
-    let i = 2;
+    const vals = [];
+    let i = 1;
 
     if (nome !== undefined) { sets.push(`nome = $${i++}`); vals.push(String(nome).trim()); }
     if (renda_fixa !== undefined) { sets.push(`renda_fixa = $${i++}`); vals.push(toNum(renda_fixa)); }
     if (gastos_fixos !== undefined) { sets.push(`gastos_fixos = $${i++}`); vals.push(toNum(gastos_fixos)); }
     if (meta_economia !== undefined) { sets.push(`meta_economia = $${i++}`); vals.push(toNum(meta_economia)); }
+    if (dia_pagamento !== undefined) {
+      const dp = Math.max(1, Math.min(30, Number(dia_pagamento) || 1));
+      sets.push(`dia_pagamento = $${i++}`); vals.push(dp);
+    }
     if (senha !== undefined) {
       const senha_hashed = await bcrypt.hash(String(senha), 10);
-      sets.push(`senha = $${i++}`);
-      vals.push(senha_hashed);
+      sets.push(`senha = $${i++}`); vals.push(senha_hashed);
     }
 
-    if (sets.length === 0) return res.status(400).json({ error: 'Nada para atualizar' });
+    if (!sets.length) return res.status(400).json({ error: 'Nada para atualizar' });
 
-    const sql = `update usuario set ${sets.join(', ')} where id_usuario = $1`;
-    await pool.query(sql, vals);
-    return res.json({ ok: true });
+    const sql = `
+      update usuario
+         set ${sets.join(', ')}
+       where id_usuario = $${i}
+      returning id_usuario, nome, email, renda_fixa, gastos_fixos, meta_economia, dia_pagamento, created_at
+    `;
+    vals.push(id);
+
+    const { rows } = await pool.query(sql, vals);
+    return res.json({ ok: true, user: rows[0] });
   } catch (e) {
     console.error('PATCH /api/usuarios/:id erro:', e);
     return res.status(500).json({ error: 'Falha ao atualizar usuário' });
@@ -402,16 +456,29 @@ app.patch('/api/usuarios/:id', auth, sameUserParam('id'), async (req, res) => {
 async function handleListCategorias(req, res) {
   try {
     const tipo = req.query?.tipo;
+
     if (tipo === 'despesa' || tipo === 'receita') {
       const { rows } = await pool.query(
-        'select id_categoria, nome_categoria, tipo from categoria where tipo = $1 order by nome_categoria',
+        `select id_categoria, nome_categoria, tipo
+           from categoria
+          where tipo = $1
+            and sistema = false
+          order by
+            case when nome_categoria = 'Outros' then 1 else 0 end,
+            nome_categoria`,
         [tipo]
       );
       return res.json(rows);
     }
 
     const { rows } = await pool.query(
-      'select id_categoria, nome_categoria, tipo from categoria order by tipo, nome_categoria'
+      `select id_categoria, nome_categoria, tipo
+         from categoria
+        where sistema = false
+        order by
+          tipo,
+          case when nome_categoria = 'Outros' then 1 else 0 end,
+          nome_categoria`
     );
     return res.json(rows);
   } catch (e) {
@@ -503,6 +570,221 @@ app.get('/api/transacoes/:id_usuario', auth, sameUserParam('id_usuario'), async 
   } catch (e) {
     console.error('GET /api/transacoes/:id_usuario erro:', e);
     res.status(500).json({ error: 'Erro ao listar transações' });
+  }
+});
+
+app.post('/api/mensal/garantir', auth, async (req, res) => {
+  try {
+    const id_usuario = Number(req.user?.sub);
+    const { ym } = req.body || {};
+    const now = new Date();
+    const ymAlvo = (typeof ym === 'string' && /^\d{4}-\d{2}$/.test(ym))
+      ? ym
+      : `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+    // Serializa execuções concorrentes por usuário (evita duplicidade)
+    await pool.query('select pg_advisory_xact_lock($1, $2)', [42, id_usuario]);
+
+    // Categorias do sistema
+    const { rows: cat } = await pool.query(`
+      select id_categoria, nome_categoria, tipo
+      from categoria
+      where sistema = true
+    `);
+    const catId = (nome, tipo) => cat.find(c => c.nome_categoria === nome && c.tipo === tipo)?.id_categoria;
+
+    // Parâmetros do usuário + data de criação + saldo inicial
+    const { rows: urows } = await pool.query(`
+      select
+        coalesce(renda_fixa,0)::numeric    as renda_fixa,
+        coalesce(gastos_fixos,0)::numeric  as gastos_fixos,
+        coalesce(dia_pagamento,1)::int     as dia_pagamento,
+        coalesce(saldo_inicial,0)::numeric as saldo_inicial,
+        created_at
+      from usuario
+      where id_usuario = $1
+    `, [id_usuario]);
+    if (!urows.length) return res.status(404).json({ error: 'usuario não encontrado' });
+    const { renda_fixa, gastos_fixos, dia_pagamento, saldo_inicial, created_at } = urows[0];
+
+    // Helpers de datas
+    const toYM = (d) => {
+      const dt = new Date(d);
+      return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`;
+    };
+    const ymPrev = (yymm) => {
+      const [y, m] = yymm.split('-').map(Number);
+      const d = new Date(y, m - 1, 1);
+      d.setMonth(d.getMonth() - 1);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    };
+    const ymNext = (yymm) => {
+      const [y, m] = yymm.split('-').map(Number);
+      const d = new Date(y, m - 1, 1);
+      d.setMonth(d.getMonth() + 1);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    };
+    const ajustarDiaParaMes = (diaDesejado, yymm) => {
+      const [ano, mes] = yymm.split('-').map(Number);
+      const ultimoDia = new Date(ano, mes, 0).getDate();
+      return Math.min(Number(diaDesejado) || 1, ultimoDia);
+    };
+
+    const ymHoje = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const isMesAtual = ymAlvo === ymHoje;
+
+    // === Lógica do PRIMEIRO CICLO ===
+    const ymCriacao = toYM(created_at);
+    const diaCriacao = new Date(created_at).getDate();
+    const diaPagCriacaoCorrigido = ajustarDiaParaMes(dia_pagamento, ymCriacao);
+
+    // Primeiro ciclo = primeiro dia_pagamento >= data de criação
+    const firstCycleYM = (diaCriacao <= diaPagCriacaoCorrigido) ? ymCriacao : ymNext(ymCriacao);
+
+    const isOnboardingMonth = (ymAlvo === ymCriacao);
+    const isFirstCycleMonth = (ymAlvo === firstCycleYM);
+    const afterFirstCycle = ( // ymAlvo > firstCycleYM (comparação de ano-mês)
+      Number(ymAlvo.slice(0, 4)) > Number(firstCycleYM.slice(0, 4)) ||
+      (ymAlvo.slice(0, 4) === firstCycleYM.slice(0, 4) && Number(ymAlvo.slice(5, 7)) > Number(firstCycleYM.slice(5, 7)))
+    );
+
+    // (0) Onboarding: garantir Ajuste Inicial se ainda não existir
+    if (isOnboardingMonth && Number(saldo_inicial) > 0) {
+      const { rows: catAj } = await pool.query(`
+        select id_categoria from categoria
+        where nome_categoria = 'Ajuste Inicial' and tipo = 'receita' and sistema = true
+        limit 1
+      `);
+      if (catAj.length) {
+        const { rows: exAj } = await pool.query(`
+          select 1
+          from transacao t
+          join categoria c on c.id_categoria = t.id_categoria
+          where t.id_usuario = $1
+            and c.nome_categoria = 'Ajuste Inicial'
+            and c.tipo = 'receita'
+            and to_char(t.data_transacao,'YYYY-MM') = $2
+            and t.valor = $3
+          limit 1
+        `, [id_usuario, ymAlvo, Number(saldo_inicial)]);
+        if (!exAj.length) {
+          await pool.query(`
+            insert into transacao (id_usuario, id_categoria, descricao, valor, data_transacao, tipo)
+            values ($1, $2, $3, $4, CURRENT_DATE, 'receita')
+          `, [id_usuario, catAj[0].id_categoria, 'Ajuste de saldo (onboarding)', Number(saldo_inicial)]);
+        }
+      }
+    }
+
+    // (1) Carryover: só APÓS o primeiro ciclo (no mês seguinte ao firstCycle)
+    const ymAnterior = ymPrev(ymAlvo);
+    if (afterFirstCycle) {
+      // somas reais do mês anterior
+      const { rows: aggPrev } = await pool.query(`
+        select
+          coalesce(sum(case when tipo='receita' then valor else 0 end),0)::numeric as receitas,
+          coalesce(sum(case when tipo='despesa' then valor else 0 end),0)::numeric as despesas
+        from transacao
+        where id_usuario = $1
+          and to_char(data_transacao,'YYYY-MM') = $2
+      `, [id_usuario, ymAnterior]);
+      const receitasPrev = Number(aggPrev[0].receitas);
+      const despesasPrev = Number(aggPrev[0].despesas);
+
+      const saldoPrev = (Number(renda_fixa) + receitasPrev) - (Number(gastos_fixos) + despesasPrev);
+
+      if (saldoPrev !== 0) {
+        const firstDay = `${ymAlvo}-01`;
+        const tipo = saldoPrev > 0 ? 'receita' : 'despesa';
+        const valor = Math.abs(saldoPrev);
+        const catSaldo = catId('Saldo ao fim do mês anterior', tipo);
+        if (catSaldo) {
+          const { rows: exPrev } = await pool.query(`
+            select 1
+            from transacao t
+            join categoria c on c.id_categoria = t.id_categoria
+            where t.id_usuario = $1
+              and c.nome_categoria = 'Saldo ao fim do mês anterior'
+              and c.tipo = $2
+              and t.data_transacao = $3::date
+              and t.valor = $4
+            limit 1
+          `, [id_usuario, tipo, firstDay, valor]);
+          if (!exPrev.length) {
+            await pool.query(`
+              insert into transacao (id_usuario, id_categoria, descricao, valor, data_transacao, tipo)
+              values ($1, $2, $3, $4, $5::date, $6)
+            `, [id_usuario, catSaldo, 'Saldo ao fim do mês anterior', valor, firstDay, tipo]);
+          }
+        }
+      }
+    }
+    // (Se for onboarding ou firstCycleMonth, não cria carryover)
+
+    // (2) Salário e Gastos Fixos:
+    //  - No mês do onboarding: só se ESTE mês for o firstCycle e o dia_pagamento já tiver chegado.
+    //  - No mês do firstCycle: idem (só quando chegar o dia).
+    //  - Depois do firstCycle: regra normal (no mês atual, quando chegar o dia).
+    const diaCorrigido = ajustarDiaParaMes(dia_pagamento, ymAlvo);
+    const hojeDia = now.getDate();
+
+    const podeLancarFixos =
+      isMesAtual &&
+      (isFirstCycleMonth || afterFirstCycle) &&
+      (hojeDia >= diaCorrigido);
+
+    if (podeLancarFixos && Number(renda_fixa) > 0) {
+      const dataSalario = `${ymAlvo}-${String(diaCorrigido).padStart(2, '0')}`;
+      const catSal = catId('Salário', 'receita');
+      if (catSal) {
+        const { rows: exSal } = await pool.query(`
+          select 1
+          from transacao t
+          join categoria c on c.id_categoria = t.id_categoria
+          where t.id_usuario = $1
+            and c.nome_categoria = 'Salário'
+            and c.tipo = 'receita'
+            and t.data_transacao = $2::date
+            and t.valor = $3
+          limit 1
+        `, [id_usuario, dataSalario, Number(renda_fixa)]);
+        if (!exSal.length) {
+          await pool.query(`
+            insert into transacao (id_usuario, id_categoria, descricao, valor, data_transacao, tipo)
+            values ($1, $2, $3, $4, $5::date, 'receita')
+          `, [id_usuario, catSal, 'Salário do mês', Number(renda_fixa), dataSalario]);
+        }
+      }
+    }
+
+    if (podeLancarFixos && Number(gastos_fixos) > 0) {
+      const dataGastos = `${ymAlvo}-${String(diaCorrigido).padStart(2, '0')}`;
+      const catGf = catId('Gastos Fixos', 'despesa');
+      if (catGf) {
+        const { rows: exGf } = await pool.query(`
+          select 1
+          from transacao t
+          join categoria c on c.id_categoria = t.id_categoria
+          where t.id_usuario = $1
+            and c.nome_categoria = 'Gastos Fixos'
+            and c.tipo = 'despesa'
+            and t.data_transacao = $2::date
+            and t.valor = $3
+          limit 1
+        `, [id_usuario, dataGastos, Number(gastos_fixos)]);
+        if (!exGf.length) {
+          await pool.query(`
+            insert into transacao (id_usuario, id_categoria, descricao, valor, data_transacao, tipo)
+            values ($1, $2, $3, $4, $5::date, 'despesa')
+          `, [id_usuario, catGf, 'Gastos fixos do mês', Number(gastos_fixos), dataGastos]);
+        }
+      }
+    }
+
+    return res.json({ ok: true });
+  } catch (e) {
+    console.error('[GARANTIR MÊS]', e);
+    return res.status(500).json({ error: 'Falha ao garantir mês' });
   }
 });
 
@@ -657,33 +939,25 @@ app.get('/api/analytics/account-stats/:id_usuario', auth, sameUserParam('id_usua
 
     const { rows } = await pool.query(
       `
-                  WITH base AS (
-        SELECT 
-          u.created_at::date                         AS data_ref,
-          COALESCE(u.renda_fixa, 0)::numeric(12,2)   AS renda_fixa,
-          COALESCE(u.gastos_fixos, 0)::numeric(12,2) AS gastos_fixos
+      WITH base AS (
+        SELECT u.created_at::date AS data_ref
         FROM usuario u
         WHERE u.id_usuario = $1
       ),
-      desp_mes AS (
-        SELECT COALESCE(SUM(valor),0)::numeric(12,2) AS total
+      agg_mes AS (
+        SELECT
+          COALESCE(SUM(CASE WHEN tipo = 'receita' THEN valor ELSE 0 END), 0)::numeric(12,2) AS receitas_mes,
+          COALESCE(SUM(CASE WHEN tipo = 'despesa' THEN valor ELSE 0 END), 0)::numeric(12,2) AS despesas_mes
         FROM transacao
         WHERE id_usuario = $1
           AND date_trunc('month', data_transacao) = date_trunc('month', CURRENT_DATE)
       )
       SELECT
         GREATEST(0, (CURRENT_DATE - (SELECT data_ref FROM base))::int) AS dias_conta,
-        (SELECT COUNT(*) FROM transacao t WHERE t.id_usuario = $1)::int AS total_gastos,
-        GREATEST(
-          0,
-          (SELECT renda_fixa  FROM base)
-          - (SELECT gastos_fixos FROM base)
-          - (SELECT total       FROM desp_mes)
-        )::numeric(12,2) AS economia_mes;
-
-
-      `
-      , [id]
+        (SELECT COUNT(*) FROM transacao t WHERE t.id_usuario = $1)::int            AS total_gastos,
+        (SELECT receitas_mes - despesas_mes FROM agg_mes)::numeric(12,2)           AS economia_mes
+      `, 
+      [id]
     );
 
     res.json(rows[0]);
