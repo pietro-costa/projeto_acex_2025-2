@@ -32,9 +32,9 @@ export const Navigation = ({ currentView, setCurrentView }: NavigationProps) => 
               aria-label="Ir para o Painel"
             >
               <img
-                src="fintyLogo-removebg-preview.png" /* use /logo.svg se tiver SVG */
+                src="logoabas2.png" /* use /logo.svg se tiver SVG */
                 alt="Finty"
-                className="h-12 sm:h-13 md:h-14 w-auto select-none"
+                className="h-10 sm:h-10 md:h-9 w-auto select-none"
                 draggable="false"
               />
             </button>

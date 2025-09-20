@@ -16,13 +16,24 @@ export const AdvancedAnalyticsView = () => {
   const [loadingDaily, setLoadingDaily] = useState(false);
 
   useEffect(() => {
-    const id = Number(localStorage.getItem("id_usuario") || "1");
-    setLoadingDaily(true);
-    getSumByDay(id, 7)
-      .then(rows => setDailyData(rows.map(r => ({ period: r.label, expenses: Number(r.total) }))))
-      .catch(console.error)
-      .finally(() => setLoadingDaily(false));
-  }, []);
+  const id = Number(localStorage.getItem("id_usuario") || "1");
+  setLoadingDaily(true);
+
+  const today = new Date();
+  const daysFromStartOfMonth = today.getDate(); // 1..31
+
+  getSumByDay(id, daysFromStartOfMonth)
+    .then(rows =>
+      // (opcional) garantir ordem cronológica, caso a API não retorne ordenado
+      rows
+        .map((r: any) => ({ period: String(r.label), expenses: Number(r.total) }))
+        .sort((a, b) => new Date(a.period).getTime() - new Date(b.period).getTime())
+    )
+    .then(setDailyData)
+    .catch(console.error)
+    .finally(() => setLoadingDaily(false));
+}, []);
+
 
   const [monthlyData, setMonthlyData] = useState<{ period: string; expenses: number }[]>([]);
   const [yearlyData, setYearlyData]   = useState<{ period: string; expenses: number }[]>([]);
@@ -80,6 +91,20 @@ export const AdvancedAnalyticsView = () => {
   };
 
   const chartConfig = { expenses: { label: "Gastos", color: "#fbbf24" } };
+
+const yPadMax = (max: number) => {
+  if (!max || !isFinite(max)) return 1;   // quando tudo é 0
+  const padded = max * 1.1;               // +10% de folga
+  const mag = Math.pow(10, Math.floor(Math.log10(padded)));
+  return Math.ceil(padded / mag) * mag;   // arredonda pra cima (bonito)
+};
+
+const formatBR = (v: any) =>
+  Number(v).toLocaleString("pt-BR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  
 
   return (
     <div className="space-y-6">
@@ -145,34 +170,9 @@ export const AdvancedAnalyticsView = () => {
 
       {/* GRÁFICOS */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        {/* BARRAS */}
-        <Card className="bg-slate-800 border-slate-700 h-full">
-          <CardHeader>
-            <CardTitle className="text-white">{getPeriodHeader()}</CardTitle>
-            <CardDescription className="text-slate-400">
-              Visualize seus padrões de gastos ao longo do tempo
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="min-w-0">
-            <ChartContainer
-              config={chartConfig}
-              className="w-full aspect-[4/3] md:aspect-video lg:aspect-[16/10]"
-            >
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={getCurrentData()}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
-                  <XAxis dataKey="period" tick={{ fill: '#94a3b8' }} />
-                  <YAxis tick={{ fill: '#94a3b8' }} tickFormatter={(v) => `R$${v}`} />
-                  <ChartTooltip content={<ChartTooltipContent />} formatter={(value) => [`R$${value}`, "Gastos"]} />
-                  <Bar dataKey="expenses" fill="#fbbf24" name="Gastos" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </ChartContainer>
-          </CardContent>
-        </Card>
 
         {/* LINHA + ÍCONE TENDÊNCIA */}
-        <Card className="bg-slate-800 border-slate-700 h-full">
+        <Card className="bg-slate-800 border-slate-700 h-full lg:col-span-2">
           <CardHeader>
             <CardTitle className="text-white">
               <span className="flex items-center gap-2">
@@ -187,20 +187,24 @@ export const AdvancedAnalyticsView = () => {
           <CardContent className="min-w-0">
             <ChartContainer
               config={chartConfig}
-              className="w-full aspect-[4/3] md:aspect-video lg:aspect-[16/10]"
+              className="w-full h-[260px] md:h-[320px] lg:h-[360px]"
             >
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={getCurrentData()}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
                   <XAxis dataKey="period" tick={{ fill: '#94a3b8' }} />
-                  <YAxis tick={{ fill: '#94a3b8' }} tickFormatter={(v) => `R$${v}`} />
-                  <ChartTooltip content={<ChartTooltipContent />} formatter={(value) => [`R$${value}`, "Gastos"]} />
+                  <YAxis 
+                  tick={{ fill: '#94a3b8' }} 
+                  tickFormatter={(v) => `R$${v}`} 
+                  domain={[0, (dataMax: number) => Math.max(1, yPadMax(dataMax))]}
+                  />
+                  <ChartTooltip content={<ChartTooltipContent />} formatter={(value) => [`R$${value}`]} />
                   <Line
                     type="monotone"
                     dataKey="expenses"
                     stroke="#fbbf24"
                     strokeWidth={3}
-                    dot={{ fill: '#fbbf24', strokeWidth: 2, r: 6 }}
+                    dot={{ fill: '#fbbf24', strokeWidth: 2, r: 4 }}
                     name="Gastos"
                   />
                 </LineChart>
@@ -210,43 +214,47 @@ export const AdvancedAnalyticsView = () => {
         </Card>
       </div>
 
-      {/* RESUMO */}
-      <Card className="bg-slate-800 border-slate-700">
-        <CardHeader>
-          <CardTitle className="text-white">📋 Resumo Estatístico</CardTitle>
-          <CardDescription className="text-slate-400">
-            Dados importantes sobre o período selecionado
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="text-center p-4 bg-slate-700 rounded-lg">
-              <p className="text-sm text-slate-400">Total do Período</p>
-              <p className="text-2xl font-bold text-yellow-500">
-                R${getCurrentData().reduce((sum, item) => sum + item.expenses, 0)}
-              </p>
-            </div>
-            <div className="text-center p-4 bg-slate-700 rounded-lg">
-              <p className="text-sm text-slate-400">Média</p>
-              <p className="text-2xl font-bold text-blue-500">
-                R${Math.round(getCurrentData().reduce((sum, item) => sum + item.expenses, 0) / (getCurrentData().length || 1))}
-              </p>
-            </div>
-            <div className="text-center p-4 bg-slate-700 rounded-lg">
-              <p className="text-sm text-slate-400">Maior Gasto</p>
-              <p className="text-2xl font-bold text-red-500">
-                R${getCurrentData().length ? Math.max(...getCurrentData().map(item => item.expenses)) : 0}
-              </p>
-            </div>
-            <div className="text-center p-4 bg-slate-700 rounded-lg">
-              <p className="text-sm text-slate-400">Menor Gasto</p>
-              <p className="text-2xl font-bold text-green-500">
-                R${getCurrentData().length ? Math.min(...getCurrentData().map(item => item.expenses)) : 0}
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+{/* RESUMO*/}
+<Card className="bg-slate-800 border-slate-700">
+  <CardHeader>
+    <CardTitle className="text-white">📋 Resumo Estatístico</CardTitle>
+    <CardDescription className="text-slate-400">
+      Dados importantes sobre o período selecionado
+    </CardDescription>
+  </CardHeader>
+  <CardContent>
+    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="text-center p-4 bg-slate-700 rounded-lg">
+        <p className="text-sm text-slate-400">Total do Período</p>
+        <p className="text-2xl font-bold text-yellow-500">
+          R$ {formatBR(getCurrentData().reduce((sum, item) => sum + item.expenses, 0))}
+        </p>
+      </div>
+      <div className="text-center p-4 bg-slate-700 rounded-lg">
+        <p className="text-sm text-slate-400">Média de gastos por dia</p>
+        <p className="text-2xl font-bold text-blue-500">
+          R$ {formatBR(Math.round(
+            getCurrentData().reduce((sum, item) => sum + item.expenses, 0) /
+            (getCurrentData().length || 1)
+          ))}
+        </p>
+      </div>
+      <div className="text-center p-4 bg-slate-700 rounded-lg">
+        <p className="text-sm text-slate-400">Maior Gasto</p>
+        <p className="text-2xl font-bold text-red-500">
+          R$ {formatBR(getCurrentData().length ? Math.max(...getCurrentData().map(item => item.expenses)) : 0)}
+        </p>
+      </div>
+      <div className="text-center p-4 bg-slate-700 rounded-lg">
+        <p className="text-sm text-slate-400">Menor Gasto</p>
+        <p className="text-2xl font-bold text-green-500">
+          R$ {formatBR(getCurrentData().length ? Math.min(...getCurrentData().map(item => item.expenses)) : 0)}
+        </p>
+      </div>
+    </div>
+  </CardContent>
+</Card>
+
     </div>
   );
 };
