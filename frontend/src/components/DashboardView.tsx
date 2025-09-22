@@ -657,14 +657,14 @@ export const DashboardView = () => {
         <Card className="bg-slate-800 border-slate-700">
           <CardHeader>
             <CardTitle className="text-white flex items-center gap-2">
-              <TrendingUp className="w-5 h-5 text-emerald-500" />
-              Saldo do mês
+            <TrendingUp className={`w-5 h-5 ${saldoMes < 0 ? 'text-red-500' : 'text-emerald-500'}`} />
+            Saldo do mês
             </CardTitle>
             <CardDescription className="text-slate-400">
               O que sobrou este mês: receitas − despesas
             </CardDescription>
           </CardHeader>
-          <CardContent className="text-2xl font-semibold text-emerald-400">
+          <CardContent className={`text-2xl font-semibold ${saldoMes < 0 ? 'text-red-500' : 'text-emerald-400'}`}>
             {fmtBRL(saldoMes)}
           </CardContent>
         </Card>
