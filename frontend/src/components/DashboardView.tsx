@@ -64,6 +64,32 @@ const fmtDia = (s: string) => {
 };
 const fmtMes = (s: string) => s.replace("-", "/");
 
+
+const toNumberFlexible = (s: string | number | null | undefined) => {
+  if (s === null || s === undefined) return undefined as any;
+  if (typeof s === 'number') return s;
+  const str = String(s).trim();
+  if (!str) return undefined as any;
+
+  const lastComma = str.lastIndexOf(',');
+  const lastDot = str.lastIndexOf('.');
+  let norm = str;
+
+  if (lastComma > lastDot) {
+  
+    norm = str.replace(/\./g, '').replace(',', '.');
+  } else if (lastDot > lastComma) {
+  
+    norm = str.replace(/,/g, '');
+  } else {
+    norm = str;
+  }
+
+  const n = Number(norm.replace(/[^\d.-]/g, ''));
+  return Number.isFinite(n) ? n : undefined;
+};
+
+
 export const DashboardView = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

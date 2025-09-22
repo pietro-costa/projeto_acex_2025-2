@@ -802,15 +802,31 @@ app.put('/api/transacoes/:id_transacao', auth, async (req, res) => {
       return res.status(403).json({ error: 'forbidden' });
     }
 
-    let valorNum = undefined;
+      let valorNum = undefined;
     if (valor !== undefined && valor !== null && valor !== '') {
-      valorNum = typeof valor === 'number'
-        ? valor
-        : Number(String(valor).replace(/\./g, '').replace(',', '.'));
-      if (!Number.isFinite(valorNum) || valorNum < 0) {
-        return res.status(400).json({ error: 'valor inválido' });
-      }
-    }
+      if (typeof valor === 'number') {
+        valorNum = valor;
+       } else {
+         const s = String(valor).trim();
+        const lastComma = s.lastIndexOf(',');
+         const lastDot = s.lastIndexOf('.');
+         let norm = s;
+
+         if (lastComma > lastDot) {
+           norm = s.replace(/\./g, '').replace(',', '.');
+         } else if (lastDot > lastComma) {
+           norm = s.replace(/,/g, '');
+        } else {
+          
+           norm = s;
+         }
+         valorNum = Number(norm.replace(/[^\d.-]/g, ''));
+       }
+       if (!Number.isFinite(valorNum) || valorNum < 0) {
+       return res.status(400).json({ error: 'valor inválido' });
+       }
+     }
+
 
     const sets = [];
     const args = [];
