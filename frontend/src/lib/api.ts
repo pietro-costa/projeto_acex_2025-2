@@ -142,11 +142,11 @@ export const getSumByDay = (idUsuario: number, days = 7, tipo: "despesa" | "rece
     `/api/analytics/sum-by-day/${idUsuario}?days=${days}&tipo=${tipo}`
   );
 
-export const getSumByMonth = (idUsuario: number, months = 6) =>
-  api<SumByMonth[]>(`/api/analytics/sum-by-month/${idUsuario}?months=${months}`);
+export const getSumByMonth = (idUsuario: number, months = 6, tipo: "despesa" | "receita" = "receita") =>
+  api<SumByMonth[]>(`/api/analytics/sum-by-month/${idUsuario}?months=${months}&tipo=${tipo}`);
 
-export const getSumByYear = (idUsuario: number, years = 3) =>
-  api<SumByYear[]>(`/api/analytics/sum-by-year/${idUsuario}?years=${years}`);
+export const getSumByYear = (idUsuario: number, years = 3, tipo: "despesa" | "receita" = "receita") =>
+  api<SumByYear[]>(`/api/analytics/sum-by-year/${idUsuario}?years=${years}&tipo=${tipo}`);
 
 export const getAccountStats = (idUsuario: number) =>
   api<AccountStats>(`/api/analytics/account-stats/${idUsuario}`);

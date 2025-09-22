@@ -19,21 +19,15 @@ export const AdvancedAnalyticsView = () => {
   const id = Number(localStorage.getItem("id_usuario") || "1");
   setLoadingDaily(true);
 
-  const today = new Date();
-  const daysFromStartOfMonth = today.getDate(); // 1..31
-
-  getSumByDay(id, daysFromStartOfMonth)
+  const DAYS = 7; // fixo: últimos 7 dias
+  getSumByDay(id, DAYS, "despesa")
     .then(rows =>
-      // (opcional) garantir ordem cronológica, caso a API não retorne ordenado
-      rows
-        .map((r: any) => ({ period: String(r.label), expenses: Number(r.total) }))
-        .sort((a, b) => new Date(a.period).getTime() - new Date(b.period).getTime())
+      rows.map((r: any) => ({ period: String(r.label), expenses: Number(r.total) }))
     )
     .then(setDailyData)
     .catch(console.error)
     .finally(() => setLoadingDaily(false));
 }, []);
-
 
   const [monthlyData, setMonthlyData] = useState<{ period: string; expenses: number }[]>([]);
   const [yearlyData, setYearlyData]   = useState<{ period: string; expenses: number }[]>([]);

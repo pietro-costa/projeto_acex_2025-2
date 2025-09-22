@@ -897,9 +897,9 @@ app.get('/api/analytics/sum-by-day/:id_usuario', auth, sameUserParam('id_usuario
       with dias as (
         select generate_series(
           (current_date - ($2::int - 1) * interval '1 day')::date,
-          current_date,
+          current_date::date,
           interval '1 day'
-        )::date as dia
+        )::date AS dia
       )
       select
         to_char(d.dia, 'DD/MM') as label,
@@ -907,8 +907,8 @@ app.get('/api/analytics/sum-by-day/:id_usuario', auth, sameUserParam('id_usuario
       from dias d
       left join transacao t
         on t.id_usuario = $1
-       and t.data_transacao = d.dia
-       and t.tipo = 'despesa'          -- fixo: só despesas
+       and t.data_transacao::date = d.dia
+       and t.tipo = 'despesa'
       group by d.dia
       order by d.dia;
       `,
@@ -949,6 +949,7 @@ app.get('/api/analytics/sum-by-month/:id_usuario', auth, sameUserParam('id_usuar
         on t.id_usuario = $1
        and t.data_transacao >= m.mes
        and t.data_transacao <  (m.mes + interval '1 month')
+       and t.tipo = 'despesa'
       group by m.mes
       order by m.mes;
       `,
@@ -989,6 +990,7 @@ app.get('/api/analytics/sum-by-year/:id_usuario', auth, sameUserParam('id_usuari
         on t.id_usuario = $1
        and t.data_transacao >= a.ano
        and t.data_transacao <  (a.ano + interval '1 year')
+       and t.tipo = 'despesa'
       group by a.ano
       order by a.ano;
       `,
