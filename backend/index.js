@@ -6,6 +6,8 @@ import 'dotenv/config';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { sendVerificationEmail, sendPasswordResetEmail } from './utils/mailer.js';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 
 const JWT_SECRET = process.env.JWT_SECRET;
 const JWT_EXPIRES = process.env.JWT_EXPIRES;
@@ -33,12 +35,20 @@ function sameUserParam(paramName) {
 }
 
 const app = express();
+app.use(helmet());
 const allowed = [process.env.FRONT_URL].filter(Boolean);
 app.use(cors({
   origin: allowed,
   credentials: true,
 }));
 app.use(express.json());
+
+const authLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000, // 10 minutos
+  max: 50,                  // até 50 req por IP/janela
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 const toNum = (v) =>
   v === undefined || v === null || v === '' ? 0 : Number(String(v).replace(',', '.'));
@@ -208,7 +218,7 @@ function newVerificationToken() {
   return crypto.randomBytes(32).toString('hex');
 }
 
-app.post('/api/usuarios/resend-verification', async (req, res) => {
+app.post('/api/usuarios/resend-verification', authLimiter, async (req, res) => {
   const client = await pool.connect();
   try {
     const email = String(req.body?.email || '').trim().toLowerCase();
@@ -255,7 +265,7 @@ app.post('/api/usuarios/resend-verification', async (req, res) => {
   }
 });
 
-app.post('/api/login', async (req, res) => {
+app.post('/api/login', authLimiter, async (req, res) => {
   try {
     const email = String(req.body?.email || '').trim().toLowerCase();
     const senha = String(req.body?.senha || '');
@@ -309,7 +319,7 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
-app.post('/api/forgot-password', async (req, res) => {
+app.post('/api/forgot-password', authLimiter, async (req, res) => {
   const { email } = req.body;
 
   const okResponse = {
@@ -351,7 +361,7 @@ app.post('/api/forgot-password', async (req, res) => {
   }
 });
 
-app.post('/api/password-reset', async (req, res) => {
+app.post('/api/password-reset', authLimiter, async (req, res) => {
   const { token, senha, confirm_senha } = req.body;
 
   if (!token || !senha || !confirm_senha) {

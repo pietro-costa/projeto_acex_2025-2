@@ -64,7 +64,8 @@ function InfoTiposCard({ tipoSelecionado }: { tipoSelecionado: TipoTransacao }) 
           <AlertTriangle className="h-4 w-4 text-amber-400 mt-0.5" />
           <p className="text-xs text-amber-200">
             <strong>Aviso: </strong>
-            A Finty não contabiliza vales (refeição/alimentação e transporte) como receita, porque não representam saldo em conta. Por isso, não entram no saldo do mês.{" "}
+            A Finty não conta vales (refeição/alimentação e transporte) como receita, pois não viram saldo em conta.
+            Também não gerenciamos crédito. Em vez de lançar cada compra no cartão, cadastre apenas a despesa “Fatura do cartão de crédito” quando pagar a fatura.{" "}
           </p>
         </div>
 

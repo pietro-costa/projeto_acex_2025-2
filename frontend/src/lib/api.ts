@@ -15,7 +15,7 @@ class ApiError extends Error {
 
 async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   const url = `${BASE}${path.startsWith("/") ? path : `/${path}`}`;
-  const token = localStorage.getItem("token") ?? undefined;
+  const token = sessionStorage.getItem("token") ?? undefined;
 
   // normaliza os headers do init para objeto simples
   const initHeaders: Record<string, string> =

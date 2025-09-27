@@ -25,18 +25,6 @@ create table if not exists transacao (
   data_transacao  date          not null default current_date
 );
 
-insert into categoria (nome_categoria, tipo) values
-('Alimentação','despesa'),
-('Educação','despesa'),
-('Lazer','despesa'),
-('Moradia','despesa'),
-('Roupas e Acessórios','despesa'),
-('Saúde','despesa'),
-('Serviços','despesa'),
-('Transporte','despesa'),
-('Outros','despesa')
-on conflict do nothing;
-
 alter table if exists usuario
   add column if not exists email_verificado boolean not null default false,
   add column if not exists token_verificacao text,
@@ -56,6 +44,16 @@ alter table if exists categoria
   add column if not exists sistema boolean not null default false;
 
 insert into categoria (nome_categoria, tipo, sistema) values
+('Alimentação','despesa', false),
+('Educação','despesa', false),
+('Fatura do cartão de crédito','despesa', false),
+('Lazer','despesa', false),
+('Moradia','despesa', false),
+('Roupas e Acessórios','despesa', false),
+('Saúde','despesa', false),
+('Serviços','despesa', false),
+('Transporte','despesa', false),
+('Outros','despesa', false),
 ('Ajuste Inicial','receita', true),
 ('Salário','receita', true),
 ('Gastos Fixos','despesa', true),
