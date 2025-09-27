@@ -148,7 +148,7 @@ export function AddExpenseView() {
                   value={tipo}
                   onValueChange={(v) => {
                     setTipo(v as TipoTransacao);
-                    setIdCategoria(null); // mantém categorias intactas; apenas limpa a seleção
+                    setIdCategoria(null); 
                   }}
                 >
                   <SelectTrigger className="bg-slate-900 text-slate-100">

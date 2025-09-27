@@ -191,10 +191,12 @@ export const DashboardView = () => {
     // quebras forçadas por device
     const FORCE_WRAP_MOBILE: Record<string, string[]> = {
       "roupas e acessorios": ["Roupas e", "Acessórios"],
-      "alimentacao": ["Alimenta-", "ção"], // só mobile/tablet usa hífen aqui
+      "alimentacao": ["Alimenta-", "ção"], 
+      "fatura do cartao": ["Fatura do Cartão"],// só mobile/tablet usa hífen aqui
     };
     const FORCE_WRAP_DESKTOP: Record<string, string[]> = {
-      "roupas e acessorios": ["Roupas e", "Acessórios"], // desktop mantém 2 linhas
+      "roupas e acessorios": ["Roupas e", "Acessórios"],
+      "fatura do cartao": ["Fatura do", "Cartão"]// desktop mantém 2 linhas
       // "alimentacao" fora => fica inteiro no desktop
     };
 
