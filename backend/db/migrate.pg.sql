@@ -1,17 +1,26 @@
-create table if not exists usuario (
-  id_usuario     bigserial primary key,
-  nome           varchar(100)  not null,
-  email          varchar(254)  not null unique,
-  senha          text          not null,
-  renda_fixa     numeric(12,2) not null default 0 check (renda_fixa  >= 0),
-  gastos_fixos   numeric(12,2) not null default 0 check (gastos_fixos >= 0),
-  meta_economia  numeric(12,2) not null default 0 check (meta_economia >= 0)
+CREATE TABLE IF NOT EXISTS usuario (
+  id_usuario        BIGSERIAL PRIMARY KEY,
+  nome              VARCHAR NOT NULL,
+  email             VARCHAR NOT NULL,
+  renda_fixa        NUMERIC(14,2) NOT NULL DEFAULT 0,
+  gastos_fixos      NUMERIC(14,2) NOT NULL DEFAULT 0,
+  meta_economia     NUMERIC(14,2) NOT NULL DEFAULT 0,
+  senha             TEXT NOT NULL,
+  created_at        DATE NOT NULL DEFAULT CURRENT_DATE,
+  email_verificado  BOOLEAN NOT NULL DEFAULT FALSE,
+  token_verificacao TEXT,
+  token_expires_at  TIMESTAMPTZ,
+  reset_token       TEXT,
+  reset_expires_at  TIMESTAMPTZ,
+  saldo_inicial     NUMERIC(14,2) NOT NULL DEFAULT 0,
+  dia_pagamento     SMALLINT NOT NULL DEFAULT 1 CHECK (dia_pagamento BETWEEN 1 AND 31)
 );
 
 create table if not exists categoria (
   id_categoria   bigserial primary key,
   nome_categoria varchar(100) not null,
   tipo           varchar(20)  not null check (tipo in ('receita','despesa')),
+  sistema        BOOLEAN NOT NULL DEFAULT FALSE,
   unique (nome_categoria, tipo)
 );
 
@@ -25,42 +34,32 @@ create table if not exists transacao (
   data_transacao  date          not null default current_date
 );
 
-alter table if exists usuario
-  add column if not exists email_verificado boolean not null default false,
-  add column if not exists token_verificacao text,
-  add column if not exists token_expires_at timestamptz;
-
 create index if not exists idx_usuario_token_verificacao
   on usuario(token_verificacao);
-
-alter table if exists usuario
-  add column if not exists reset_token text,
-  add column if not exists reset_expires_at timestamptz;
 
 create index if not exists idx_usuario_reset_token
   on usuario(reset_token);
 
-alter table if exists categoria
-  add column if not exists sistema boolean not null default false;
-
 insert into categoria (nome_categoria, tipo, sistema) values
-('Alimentação','despesa', false),
-('Educação','despesa', false),
-('Fatura do cartão de crédito','despesa', false),
-('Lazer','despesa', false),
-('Moradia','despesa', false),
-('Roupas e Acessórios','despesa', false),
-('Saúde','despesa', false),
-('Serviços','despesa', false),
-('Transporte','despesa', false),
-('Outros','despesa', false),
-('Ajuste Inicial','receita', true),
-('Salário','receita', true),
-('Gastos Fixos','despesa', true),
-('Saldo ao fim do mês anterior','receita', true),
-('Saldo ao fim do mês anterior','despesa', true)
+('Alimentação','despesa',FALSE),
+  ('Educação','despesa',FALSE),
+  ('Lazer','despesa',FALSE),
+  ('Moradia','despesa',FALSE),
+  ('Roupas e Acessórios','despesa',FALSE),
+  ('Saúde','despesa',FALSE),
+  ('Serviços','despesa',FALSE),
+  ('Transporte','despesa',FALSE),
+  ('Outros','despesa',FALSE),
+  ('Auxílios/Benefícios','receita',FALSE),
+  ('Bicos','receita',FALSE),
+  ('Freelance','receita',FALSE),
+  ('Prêmios e Sorteios','receita',FALSE),
+  ('Presente Recebido','receita',FALSE),
+  ('Outros','receita',FALSE),
+  ('Ajuste Inicial','receita',TRUE),
+  ('Salário','receita',TRUE),
+  ('Gastos Fixos','despesa',TRUE),
+  ('Saldo ao fim do mês anterior','receita',TRUE),
+  ('Saldo ao fim do mês anterior','despesa',TRUE),
+  ('Fatura do cartão','despesa',FALSE)
 on conflict do nothing;
-
-alter table if exists usuario
-  add column if not exists saldo_inicial numeric(12,2) not null default 0,
-  add column if not exists dia_pagamento smallint check (dia_pagamento between 1 and 28);
