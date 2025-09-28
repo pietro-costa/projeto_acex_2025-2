@@ -35,13 +35,18 @@ function sameUserParam(paramName) {
 }
 
 const app = express();
-app.use(helmet());
+app.set("trust proxy", 1);
 const allowed = [process.env.FRONT_URL].filter(Boolean);
 app.use(cors({
-  origin: allowed,
+  origin: (origin, cb) => cb(null, true),
   credentials: true,
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"]
 }));
+app.options("*", cors());
+app.use(helmet({ crossOriginResourcePolicy: false }));
 app.use(express.json());
+
 
 const authLimiter = rateLimit({
   windowMs: 10 * 60 * 1000, // 10 minutos
