@@ -5,7 +5,7 @@ import { pool } from './db/pool.js';
 import 'dotenv/config';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
-import { sendVerificationEmail, sendPasswordResetEmail } from './utils/mailer.js';
+import { mailer, sendVerificationEmail, sendPasswordResetEmail } from './utils/mailer.js';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 
@@ -116,12 +116,11 @@ app.post('/api/usuarios', async (req, res) => {
     const user = rows[0];
 
     const verifyUrl = `${process.env.APP_URL}/api/verify/${token}`;
-    await sendVerificationEmail(user.email, verifyUrl);
-
-    return res.status(201).json({
-      id_usuario: user.id_usuario,
-      message: 'Usuário criado. Enviamos um e-mail de verificação.',
-    });
+    try{
+      await sendVerificationEmail(user.email, verifyUrl);
+    } catch (e) {
+      console.warn('Falha ao enviar e-mail de verificação:', e?.code || e?.message || e);
+    }
 
     if (saldoInicial > 0) {
       const { rows: cat } = await pool.query(`
@@ -150,6 +149,11 @@ app.post('/api/usuarios', async (req, res) => {
         }
       }
     }
+
+    return res.status(201).json({
+      id_usuario: user.id_usuario,
+      message: 'Usuário criado. Enviamos um e-mail de verificação.',
+    });
 
   } catch (e) {
     if (e.code === '23505') {
@@ -259,7 +263,11 @@ app.post('/api/usuarios/resend-verification', authLimiter, async (req, res) => {
     );
 
     const verifyUrl = `${process.env.APP_URL}/api/verify/${token}`;
-    await sendVerificationEmail(user.email, verifyUrl);
+    try {
+      await sendVerificationEmail(user.email, verifyUrl);
+    } catch (e) {
+      console.warn('[MAIL] reenvio falhou:', e?.code || e?.message || e);
+    }
 
     return res.json({ message: 'Novo e-mail de verificação enviado.' });
   } catch (e) {
@@ -1071,4 +1079,13 @@ app.get('/api/analytics/account-stats/:id_usuario', auth, sameUserParam('id_usua
 });
 
 const port = Number(process.env.PORT || 3001);
+
+(async () => {
+  try {
+    await mailer.verify();
+    console.log('[MAIL] SMTP OK');
+  } catch (e) {
+    console.warn('[MAIL] SMTP verify falhou:', e?.code || e?.message || e);
+  }
+})();
 app.listen(port, () => console.log(`API ouvindo em http://localhost:${port}`));
