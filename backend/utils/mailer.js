@@ -51,7 +51,7 @@ export async function verifyMailer() {
     return true;
   } catch (e) {
     console.warn('[MAIL] SendGrid falhou:', e?.message || e);
-    return false;
+    return false;''
   }
 }
 
