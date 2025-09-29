@@ -115,7 +115,7 @@ app.post('/api/usuarios', async (req, res) => {
     const { rows } = await client.query(insertSql, insertValues);
     const user = rows[0];
 
-    const base = (process.env.API_URL || '').replace(/\/+$/,'');
+    const base = (process.env.APP_URL).replace(/\/+$/,'');
     const verifyUrl = `${base}/api/verify/${token}`;
     try{
       await sendVerificationEmail(user.email, verifyUrl);
