@@ -5,7 +5,7 @@ import { pool } from './db/pool.js';
 import 'dotenv/config';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
-import { mailer, sendVerificationEmail, sendPasswordResetEmail } from './utils/mailer.js';
+import { verifyMailer, sendVerificationEmail, sendPasswordResetEmail } from './utils/mailer.js';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 
@@ -1082,10 +1082,7 @@ const port = Number(process.env.PORT || 3001);
 
 (async () => {
   try {
-    await mailer.verify();
-    console.log('[MAIL] SMTP OK');
-  } catch (e) {
-    console.warn('[MAIL] SMTP verify falhou:', e?.code || e?.message || e);
-  }
+    await verifyMailer(); // loga OK/erro internamente
+  } catch {}
 })();
 app.listen(port, () => console.log(`API ouvindo em http://localhost:${port}`));

@@ -7,7 +7,6 @@ const sql = fs.readFileSync(new URL('./migrate.pg.sql', import.meta.url), 'utf-8
 
 const useSSL =
   String(process.env.PGSSLMODE || '').toLowerCase() === 'require' ||
-  String(process.env.PGSSL || '').toLowerCase() === 'true' ||
   process.env.NODE_ENV === 'production';
 
 export const pool = new Pool(
@@ -15,10 +14,6 @@ export const pool = new Pool(
     ? {
         connectionString: process.env.DATABASE_URL,
         ssl: useSSL ? { rejectUnauthorized: false } : undefined,
-        max: 15,
-        idleTimeoutMillis: 30000,
-        connectionTimeoutMillis: 10000,
-        keepAlive: true,
       }
     : {
         host: process.env.PGHOST,
@@ -27,10 +22,6 @@ export const pool = new Pool(
         password: process.env.PGPASSWORD,
         database: process.env.PGDATABASE,
         ssl: useSSL ? { rejectUnauthorized: false } : undefined,
-        max: 15,
-        idleTimeoutMillis: 30000,
-        connectionTimeoutMillis: 10000,
-        keepAlive: true,
       }
 );
 

@@ -16,7 +16,7 @@ export const AdvancedAnalyticsView = () => {
   const [loadingDaily, setLoadingDaily] = useState(false);
 
   useEffect(() => {
-  const id = Number(sessionStorage.getItem("id_usuario") || "1");
+  const id = Number(localStorage.getItem("id_usuario") || "1");
   setLoadingDaily(true);
 
   const DAYS = 7; // fixo: últimos 7 dias
@@ -35,7 +35,7 @@ export const AdvancedAnalyticsView = () => {
   const [loadingYearly,  setLoadingYearly]  = useState(false);
 
   useEffect(() => {
-    const id = Number(sessionStorage.getItem("id_usuario") || "1");
+    const id = Number(localStorage.getItem("id_usuario") || "1");
 
     setLoadingMonthly(true);
     getSumByMonth(id, 6)

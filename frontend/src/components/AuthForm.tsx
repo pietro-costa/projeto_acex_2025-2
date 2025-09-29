@@ -58,8 +58,8 @@ export const AuthForm = ({ onLogin }: AuthFormProps) => {
 
     try {
       const { token, user } = await postLogin({email: email.trim(), senha: password});
-      sessionStorage.setItem("token", token);
-      sessionStorage.setItem("id_usuario", String(user.id_usuario));
+      localStorage.setItem("token", token);
+      localStorage.setItem("id_usuario", String(user.id_usuario));
       onLogin?.();
     } catch (err: any) {
       if (err?.code === "EMAIL_NOT_VERIFIED") {

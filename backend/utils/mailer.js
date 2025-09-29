@@ -1,59 +1,58 @@
 import dns from 'dns';
 dns.setDefaultResultOrder('ipv4first');
 
-import nodemailer from 'nodemailer';
+const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY;
+const FROM_NAME = process.env.MAIL_FROM_NAME || 'Finty';
+const FROM_EMAIL = process.env.MAIL_FROM_EMAIL; // precisa ser o Single Sender verificado
 
-const host = process.env.SMTP_HOST || 'smtp.gmail.com';
-const port = Number(process.env.SMTP_PORT || 465);
-const secure =
-  String(process.env.SMTP_SECURE || '').toLowerCase() === 'true' || port === 465;
-
-const user = process.env.GMAIL_USER;
-const pass = process.env.GMAIL_PASS;
-
-if (!user || !pass) {
-  console.warn('[MAIL] GMAIL_USER/GMAIL_PASS não configurados – envio desativado.');
+function assertEnv() {
+  if (!SENDGRID_API_KEY) throw new Error('Falta SENDGRID_API_KEY');
+  if (!FROM_EMAIL) throw new Error('Falta MAIL_FROM_EMAIL');
 }
 
-export const mailer = nodemailer.createTransport({
-  host,
-  port,
-  secure,
-  auth: user && pass ? { user, pass } : undefined,
-  family: 4,
-  connectionTimeout: 20000,
-  greetingTimeout: 20000,
-  socketTimeout: 40000,
-  requireTLS: !secure,
-  tls: { minVersion: 'TLSv1.2', servername: host },
-});
+async function sgSend({ to, subject, html, text }) {
+  assertEnv();
+  const payload = {
+    personalizations: [{ to: [{ email: Array.isArray(to) ? to[0] : to }] }],
+    from: { email: FROM_EMAIL, name: FROM_NAME },
+    subject,
+    content: [
+      ...(text ? [{ type: 'text/plain', value: text }] : []),
+      ...(html ? [{ type: 'text/html', value: html }] : []),
+    ],
+  };
 
-async function sendWithRetry(opts, maxRetries = 2) {
-  let attempt = 0;
-  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-  while (true) {
-    try {
-      return await mailer.sendMail(opts);
-    } catch (e) {
-      const code = e?.code || e?.errno || '';
-      const transient =
-        code === 'ETIMEDOUT' ||
-        code === 'ESOCKET' ||
-        code === 'ECONNECTION' ||
-        code === 'ECONNRESET';
-      if (!transient || attempt >= maxRetries) throw e;
-      attempt += 1;
-      const delay = 800 * attempt; // 800ms, 1600ms
-      console.warn(`[MAIL] tentativa ${attempt} falhou (${code}). Retentando em ${delay}ms...`);
-      await sleep(delay);
-    }
+  const resp = await fetch('https://api.sendgrid.com/v3/mail/send', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${SENDGRID_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (resp.status === 202) return { ok: true };
+  const body = await resp.text().catch(() => '');
+  throw new Error(`SENDGRID_ERROR ${resp.status}: ${body}`);
+}
+
+export async function sendMail({ to, subject, html, text }) {
+  return sgSend({ to, subject, html, text });
+}
+
+export async function verifyMailer() {
+  try {
+    await sgSend({
+      to: FROM_EMAIL,
+      subject: 'ping',
+      text: 'ok',
+    });
+    console.log('[MAIL] SendGrid OK');
+    return true;
+  } catch (e) {
+    console.warn('[MAIL] SendGrid falhou:', e?.message || e);
+    return false;
   }
-}
-
-function fromHeader() {
-  const name = process.env.MAIL_FROM_NAME || 'Equipe Finty';
-  const email = process.env.MAIL_FROM_EMAIL || user || 'no-reply@example.com';
-  return `"${name}" <${email}>`;
 }
 
 export async function sendVerificationEmail(to, verifyUrl) {
@@ -66,12 +65,7 @@ export async function sendVerificationEmail(to, verifyUrl) {
       <p style="color:#6b7280;font-size:12px">Se você não criou uma conta, ignore esta mensagem.</p>
     </div>
   `;
-  await sendWithRetry({
-    from: fromHeader(),
-    to,
-    subject: 'Confirme seu e-mail',
-    html,
-  });
+  await sendMail({ to, subject: 'Confirme seu e-mail', html });
 }
 
 export async function sendPasswordResetEmail(to, resetUrl) {
@@ -85,10 +79,5 @@ export async function sendPasswordResetEmail(to, resetUrl) {
       <p style="color:#6b7280;font-size:12px">Se você não solicitou isso, ignore esta mensagem.</p>
     </div>
   `;
-  await sendWithRetry({
-    from: fromHeader(),
-    to,
-    subject: 'Redefinição de senha',
-    html,
-  });
+  await sendMail({ to, subject: 'Redefinição de senha', html });
 }
